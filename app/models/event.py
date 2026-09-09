@@ -54,12 +54,8 @@ class EventNews(TimestampMixin, Base):
 
     __tablename__ = "event_news"
 
-    event_id: Mapped[UUID] = mapped_column(
-        ForeignKey("news_events.id", ondelete="CASCADE"), primary_key=True
-    )
-    news_item_id: Mapped[UUID] = mapped_column(
-        ForeignKey("news_items.id", ondelete="CASCADE"), primary_key=True
-    )
+    event_id: Mapped[UUID] = mapped_column(ForeignKey("news_events.id", ondelete="CASCADE"), primary_key=True)
+    news_item_id: Mapped[UUID] = mapped_column(ForeignKey("news_items.id", ondelete="CASCADE"), primary_key=True)
     is_primary: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
 
     event: Mapped[NewsEvent] = relationship(back_populates="event_news")

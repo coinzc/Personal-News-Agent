@@ -105,9 +105,7 @@ async def test_news_event_relationship_and_url_uniqueness(tmp_path: Path) -> Non
             category="technology",
         )
         event = NewsEvent(canonical_title="One event", category="technology")
-        event.event_news.extend(
-            [EventNews(news_item=item_one, is_primary=True), EventNews(news_item=item_two)]
-        )
+        event.event_news.extend([EventNews(news_item=item_one, is_primary=True), EventNews(news_item=item_two)])
         session.add(event)
         await session.commit()
 

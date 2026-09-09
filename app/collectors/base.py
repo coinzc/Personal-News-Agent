@@ -6,7 +6,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.models.source import NewsSource
 
@@ -18,7 +18,7 @@ class CollectorError(Exception):
 class CollectorHTTPError(CollectorError):
     """An upstream returned a non-success HTTP response."""
 
-    def __init__(self, status_code: int, url: str) -> None:
+    def __init__(self, status_code: int | None, url: str) -> None:
         super().__init__(f"HTTP {status_code} while collecting {url}")
         self.status_code = status_code
         self.url = url
@@ -51,17 +51,13 @@ class BaseCollector(ABC):
     async def collect(self, source: NewsSource) -> list[CollectedNews]:
         """Collect normalized articles from one configured source."""
 
-    async def collect_many(
-        self, sources: list[NewsSource]
-    ) -> dict[str, list[CollectedNews] | Exception]:
+    async def collect_many(self, sources: list[NewsSource]) -> dict[str, list[CollectedNews] | Exception]:
         """Collect enabled sources concurrently while isolating failures."""
 
         enabled_sources = [source for source in sources if source.enabled]
-        results = await asyncio.gather(
-            *(self.collect(source) for source in enabled_sources), return_exceptions=True
-        )
+        results = await asyncio.gather(*(self.collect(source) for source in enabled_sources), return_exceptions=True)
         return {
-            str(source.id): result
+            str(source.id): cast(list[CollectedNews] | Exception, result)
             for source, result in zip(enabled_sources, results, strict=True)
         }
 

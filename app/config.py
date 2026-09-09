@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
     database_url: str = "postgresql+asyncpg://news_agent:change-me@localhost:5432/news_agent"
     redis_url: str = "redis://localhost:6379/0"
+    dedup_similarity_threshold: float = Field(default=0.78, ge=0.0, le=1.0)
+    dedup_embedding_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     wechat_app_id: str | None = None

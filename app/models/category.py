@@ -14,9 +14,7 @@ class NewsCategory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Configurable top-level or subcategory used by news classification."""
 
     __tablename__ = "news_categories"
-    __table_args__ = (
-        Index("ix_news_categories_enabled_sort_order", "enabled", "sort_order"),
-    )
+    __table_args__ = (Index("ix_news_categories_enabled_sort_order", "enabled", "sort_order"),)
 
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)

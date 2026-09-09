@@ -1,4 +1,5 @@
 """Persistence boundary for collector output."""
+
 from __future__ import annotations
 
 import logging
@@ -30,18 +31,18 @@ class NewsIngestionService:
                 author=item.author,
                 published_at=item.published_at,
                 content=item.content,
-                summary=item.summary,
+                summary=None,
                 language=item.language,
                 category=item.category,
                 tags=item.tags,
                 image_url=item.image_url,
-                hash=item.hash,
+                hash=item.content_hash,
             )
-            self.session.add(model)
             try:
-                await self.session.flush()
+                async with self.session.begin_nested():
+                    self.session.add(model)
+                    await self.session.flush()
             except IntegrityError:
-                await self.session.rollback()
                 skipped += 1
                 logger.info("Skipping duplicate news URL: %s", item.url)
             else:
