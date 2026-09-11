@@ -2,7 +2,7 @@
 
 基于 FastAPI、PostgreSQL、Redis 和 DeepSeek 的个人智能新闻 Agent。系统目标是持续采集多领域新闻，完成清洗、去重、事件聚类、分类、排序和摘要，并在 `Asia/Singapore` 时区每天 09:00 生成日报，通过可插拔渠道发送。
 
-当前仓库已完成 **Phase 4：多级新闻去重与事件聚类**。Phase 4 在前三阶段基础上增加 `NewsDedupService`、`NewsClusteringService`：按 URL hash、规范化标题、可配置标题相似度和可选 Embedding 四层信号识别重复报道，并通过现有 `event_news` 关联对象保留每一条文章及其来源。DeepSeek、Agent、日报和微信适配器仍按路线图留待后续阶段。
+当前仓库已完成 **Phase 7：Daily News Digest**。系统在 `Asia/Singapore` 时区按天加载新闻，按八大领域去重并选择 Top 3，生成带摘要、重要性说明、来源链接和发布时间的日报，保存为 `DailyDigest`，并通过 Redis 锁和数据库唯一约束保证同一天幂等。Phase 5 的 DeepSeek LLM Service、Phase 6 的 Tool Calling Agent 也已完成。
 
 ## 环境要求
 
@@ -74,9 +74,9 @@ prompts/             # 版本化 Prompt 模板（后续阶段）
 3. 异步新闻采集（已完成）
 4. 多级去重与 NewsEvent（已完成）
 5. 事件聚类（已完成）
-6. DeepSeek 统一客户端与结构化输出
-7. News Agent 与工具调用
-8. 每日日报流水线
+6. DeepSeek 统一客户端与结构化输出（已完成）
+7. News Agent 与工具调用（已完成）
+8. 每日日报流水线（已完成）
 9. 微信适配器
 10. Docker 生产化
 11. 完整测试
@@ -106,6 +106,24 @@ Phase 3 测试全部使用 `httpx.MockTransport`，包含 RSS、Atom、3 个 Moc
 
 Phase 4 测试覆盖 URL 完全重复、标题轻微改写、中文/英文同一事件、无关标题、Embedding mock、多来源事件关联、待处理文章和幂等重复运行。
 
+## Phase 5 DeepSeek LLM Service
+
+`app/llm/client.py` 定义不绑定供应商的异步 `LLMClient` 和统一异常边界；`app/llm/deepseek.py` 使用 OpenAI-compatible `AsyncOpenAI` 连接 DeepSeek。真实客户端创建时必须提供 `DEEPSEEK_API_KEY`，密钥不会出现在日志、错误消息或测试代码中。请求默认关闭 SDK 内置 retry，由服务层统一执行指数退避（`LLM_MAX_RETRIES`、`LLM_BACKOFF_FACTOR`），并将 timeout、429、5xx/连接错误转换为可处理的领域异常。
+
+`LLMClient.complete_structured()` 先解析 JSON，再用 Pydantic 严格 schema 校验；额外字段、缺失字段和超出范围的数值都会被拒绝。`NewsClassifier` 输出 category/subcategory/confidence/tags，`NewsSummarizer` 输出带 `source_url` 的摘要和要点，`NewsRanker` 输出五个 0-100 因素，并用固定权重计算最终 `importance_score`，避免由 LLM 单独决定排序。
+
+Phase 5 测试完全使用 Fake SDK/注入式客户端，覆盖 JSON 模式、usage/latency、429/5xx/timeout 重试、模型拒答、非法 JSON、schema 校验和三个新闻服务，不访问真实 DeepSeek API。
+
+## Phase 6 News Agent
+
+Phase 6 实现真正的 Tool Calling Agent：`NewsAgent` 先加载会话历史，再把用户请求和工具 schema 交给 DeepSeek；模型返回工具调用后，由 `ToolRegistry` 验证参数并执行，结果以 `tool` 消息回传模型，直到模型生成最终回答或达到最大轮数。Agent 本身不操作数据库，只依赖 `AgentMemory` 与 `ToolRegistry` 抽象。
+
+当前注册了 `search_news`、`get_latest_news`、`get_news_by_category`、`get_news_detail`、`search_events`、`get_daily_digest`、`analyze_news` 和 `summarize_news`。新增工具只需定义 Pydantic 参数模型并注册 `ToolSpec`，不需要修改查询意图的 `if/else` 分支。`SQLAlchemyNewsToolService` 是数据库业务适配器，工具层与 Agent 编排保持解耦。
+
+会话通过 `InMemoryConversationMemory`（测试/本地）或 `SQLAlchemyConversationMemory`（生产）保存用户消息、助手消息、tool calls、conversation ID 和时间戳。system prompt 位于 `prompts/agent_system.txt`，通过 `app/agent/prompts.py` 加载并带版本标识。
+
+Phase 6 测试使用 Mock DeepSeek，覆盖今日新闻、AI 分类新闻、新闻详情、历史事件查询、工具参数校验、未知工具拒绝和会话持久化，不访问真实 API 或新闻网站。
+
 ## 质量检查
 
 ```bash
@@ -120,4 +138,13 @@ pytest --cov=app
 - `.env` 已加入 `.gitignore`；提交前检查 `git diff --staged`。
 - 当前 `/health` 不连接外部服务，只反映进程存活；后续将增加独立的 readiness 检查。
 - 管理接口鉴权、URL 白名单、Prompt Injection 防护和敏感日志过滤将在对应业务阶段实现。
+
+
+## Phase 7 Daily News Digest
+
+`DailyDigestService.generate_daily_digest()` 编排 Collect → Deduplicate → Cluster → Rank → Summarize → Compose 流程。默认覆盖 AI、科技、编程、财经、商业、国际、科学、游戏八个领域，每类最多输出 3 条不同事件；每条包含一句话摘要、为什么重要、来源 URL 和标准化发布时间，正文限制在可配置长度内，并附趋势分析和“今日最值得关注的 3 件事”。
+
+服务通过注入式 collector、去重/聚类/排序/摘要/趋势步骤连接现有模块，失败会写入 `Task` 和 `DailyDigest.error_message`，不会让调度器崩溃。Redis 分布式锁 `news-agent:digest:<user>:<date>` 防止多实例重复运行，`daily_digests(user_id, digest_date)` 唯一约束提供最终幂等保护；无 Redis 的测试环境使用安全的进程内锁替身。
+
+`app/scheduler/jobs.py` 提供 APScheduler 入口，使用显式 `Asia/Singapore` 时区在每天 09:00 触发日报任务，`max_instances=1`、`coalesce=True` 并隔离任务异常。Phase 7 测试覆盖正常生成、重复执行、新闻为空和 DeepSeek 摘要失败路径。
 
