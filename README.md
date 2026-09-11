@@ -2,7 +2,7 @@
 
 基于 FastAPI、PostgreSQL、Redis 和 DeepSeek 的个人智能新闻 Agent。系统目标是持续采集多领域新闻，完成清洗、去重、事件聚类、分类、排序和摘要，并在 `Asia/Singapore` 时区每天 09:00 生成日报，通过可插拔渠道发送。
 
-当前仓库已完成 **Phase 7：Daily News Digest**。系统在 `Asia/Singapore` 时区按天加载新闻，按八大领域去重并选择 Top 3，生成带摘要、重要性说明、来源链接和发布时间的日报，保存为 `DailyDigest`，并通过 Redis 锁和数据库唯一约束保证同一天幂等。Phase 5 的 DeepSeek LLM Service、Phase 6 的 Tool Calling Agent 也已完成。
+当前仓库已完成 **应用编排与 API 接线**。FastAPI lifespan 会创建运行时容器，按配置初始化 DeepSeek、Redis、微信适配器和可选 APScheduler；`/api/agent/chat`、`/api/digest/generate` 和 `/api/wechat/webhook` 已接入容器。日报服务在 `Asia/Singapore` 时区按天加载新闻，按八大领域去重并选择 Top 3，保存为 `DailyDigest`，并通过 Redis 锁和数据库唯一约束保证同一天幂等。
 
 ## 环境要求
 
@@ -77,10 +77,11 @@ prompts/             # 版本化 Prompt 模板（后续阶段）
 6. DeepSeek 统一客户端与结构化输出（已完成）
 7. News Agent 与工具调用（已完成）
 8. 每日日报流水线（已完成）
-9. 微信适配器
-10. Docker 生产化
-11. 完整测试
-12. 监控、限流与性能优化
+9. 微信适配器（已完成）
+10. 应用编排与 API 接线（已完成）
+11. Docker 生产化
+12. 完整测试
+13. 监控、限流与性能优化
 
 每个阶段都会先检查现有结构，完成实现后运行相关测试并更新本文档。
 ## Phase 3 Collector
@@ -148,3 +149,21 @@ pytest --cov=app
 
 `app/scheduler/jobs.py` 提供 APScheduler 入口，使用显式 `Asia/Singapore` 时区在每天 09:00 触发日报任务，`max_instances=1`、`coalesce=True` 并隔离任务异常。Phase 7 测试覆盖正常生成、重复执行、新闻为空和 DeepSeek 摘要失败路径。
 
+
+## Phase 8 微信适配器与日报推送
+
+当前微信范围是个人微信接收日报和消息，不接入企业微信或公众号作为接收渠道。`app/channels/base.py` 定义 provider-neutral 的 MessageChannel，`app/channels/wechat.py` 提供 WeChatAdapter：可注入微信网关/webhook 或测试 sender，支持超时、429/5xx/网络错误指数退避，以及按 max_chars 按行分片发送。
+
+DigestDeliveryService 负责将 DailyDigest 发送到微信 recipient；成功写入 sent_at 并将状态改为 sent，失败写入 send_failed 和错误信息。Phase 8 测试使用 httpx.MockTransport 和注入 sender，不访问真实微信服务。
+
+## 应用编排与 API 接线
+
+`app/runtime.py` 提供 `ApplicationContainer`，统一持有 Redis、DeepSeek 和 WeChatAdapter，并为每次 Agent/日报请求创建独立 SQLAlchemy Session。FastAPI lifespan 在启动时创建容器，在关闭时释放 LLM、Redis 和 APScheduler 资源；设置 `ENABLE_SCHEDULER=true` 后，调度器会在 `Asia/Singapore` 每天 09:00 执行生成并发送日报。
+
+当前 API：
+
+- `POST /api/agent/chat`：调用 Tool Calling NewsAgent。
+- `POST /api/digest/generate`：手动生成指定日期日报。
+- `POST /api/wechat/webhook`：接收微信网关转发的消息并交给 Agent，可用 `X-WeChat-Webhook-Token` 校验。
+
+真实端到端运行需要填写 DeepSeek API Key、PostgreSQL/Redis 配置，并提供个人微信网关 endpoint；未配置 DeepSeek 时 Agent API 返回 503。

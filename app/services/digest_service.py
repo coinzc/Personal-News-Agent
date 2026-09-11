@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -173,7 +173,7 @@ class DailyDigestService:
         stmt = select(DailyDigest).where(DailyDigest.digest_date == target_date)
         if self.user_id is not None:
             stmt = stmt.where(DailyDigest.user_id == self.user_id)
-        return await self.session.scalar(stmt)
+        return cast(DailyDigest | None, await self.session.scalar(stmt))
 
     async def _load_items(self, target_date: date) -> list[NewsItem]:
         start_local = datetime.combine(target_date, datetime.min.time(), tzinfo=ZoneInfo(self.timezone))
@@ -239,7 +239,7 @@ class DailyDigestService:
     def _format_row(row: dict[str, Any]) -> str:
         headline = f"- {row['title']}：{row['summary']}（为什么重要：{row['why_important']}）"
         provenance = f"来源：{row['url']} | 时间：{row['published_at'] or '未知'}"
-        return f"{headline}`n  {provenance}"
+        return f"{headline}\n  {provenance}"
 
     def _compose(self, target_date: date, sections: dict[str, list[dict[str, Any]]], trend: str) -> str:
         lines = ["# 今日新闻早报", f"日期：{target_date.isoformat()}", ""]

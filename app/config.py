@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     llm_timeout: float = Field(default=45.0, gt=0.0)
     llm_max_retries: int = Field(default=3, ge=0, le=10)
     llm_backoff_factor: float = Field(default=0.5, ge=0.0)
+    enable_scheduler: bool = False
+    wechat_gateway_endpoint: str | None = None
+    wechat_gateway_token: SecretStr | None = None
+    wechat_recipient: str | None = None
+    wechat_webhook_token: SecretStr | None = None
+    wechat_message_max_chars: int = Field(default=3500, ge=100, le=20_000)
     wechat_app_id: str | None = None
     wechat_app_secret: SecretStr | None = None
     admin_api_key: SecretStr | None = None
