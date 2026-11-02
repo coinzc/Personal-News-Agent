@@ -182,7 +182,9 @@ sync_database_password() {
     -d "$POSTGRES_DB" \
     -v ON_ERROR_STOP=1 \
     -v app_password="$POSTGRES_PASSWORD" \
-    -c "ALTER ROLE \"$POSTGRES_USER\" PASSWORD :'app_password';"
+    -v app_role="$POSTGRES_USER" <<'PSQL'
+SELECT format('ALTER ROLE %I PASSWORD %L', :'app_role', :'app_password') \gexec
+PSQL
 }
 
 sync_database_password
