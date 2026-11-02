@@ -26,6 +26,14 @@ docker compose version
 
 ## Project and Configuration
 
+For a one-command deployment from an already cloned checkout, run:
+
+```bash
+sudo bash scripts/deploy.sh
+```
+
+The script installs Docker on Ubuntu when needed, creates `.env` with mode `600`, generates a database password, reads the DeepSeek key and Enterprise WeChat group bot webhook without echoing them, starts the stack, runs migrations, and checks `/health`. Re-running it preserves `.env` and named volumes. Use `--allow-incomplete` only for an infrastructure smoke test without external credentials.
+
 ```bash
 sudo mkdir -p /opt/personal-news-agent
 sudo chown -R "$USER":"$USER" /opt/personal-news-agent
@@ -51,7 +59,15 @@ DEEPSEEK_API_KEY=your-real-deepseek-key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 ENABLE_SCHEDULER=true
-WECHAT_GATEWAY_ENDPOINT=https://your-wechat-gateway.example/api/send
+MESSAGE_CHANNEL=wecom_group_bot
+WECOM_GROUP_BOT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=replace-me
+WECOM_MESSAGE_TYPE=markdown
+WECOM_MESSAGE_MAX_CHARS=3500
+WECOM_TIMEOUT=15
+WECOM_MAX_RETRIES=3
+WECOM_BACKOFF_FACTOR=0.5
+# Legacy personal-WeChat gateway settings; leave empty when using WeCom
+WECHAT_GATEWAY_ENDPOINT=
 WECHAT_GATEWAY_TOKEN=outbound-random-token
 WECHAT_RECIPIENT=your-gateway-user-id
 WECHAT_WEBHOOK_TOKEN=inbound-random-token
@@ -80,9 +96,11 @@ Logs:
 docker compose logs -f --tail=200 backend
 ```
 
-## WeChat Gateway
+## Enterprise WeChat Group Bot
 
-The project requires a personal-WeChat gateway. It does not control a personal WeChat client directly.
+The recommended deployment uses an Enterprise WeChat group bot. Create a dedicated group, add the receiving personal WeChat account, add a group bot, and copy its webhook into `WECOM_GROUP_BOT_WEBHOOK`. The project does not control a personal WeChat client directly and never needs a personal WeChat password or QR login.
+
+Test delivery with the manual digest endpoint before enabling the scheduler. Keep `.env` readable only by the service account and never commit the webhook URL.
 
 Inbound gateway request:
 

@@ -86,7 +86,18 @@ await client.aclose()
 
 ## 微信配置和发送
 
-当前 `.env.example` 的 `WECHAT_APP_ID`/`WECHAT_APP_SECRET` 只是预留字段，不会自动创建个人微信连接。实际部署需要具体网关，例如：
+生产推荐使用企业微信群机器人：个人微信加入企业微信群，服务器只调用企业微信群机器人 Webhook，不需要个人微信登录凭据或个人微信协议。当前 `.env.example` 的 `WECHAT_APP_ID`/`WECHAT_APP_SECRET` 只是兼容旧个人微信网关的预留字段。
+
+企业微信群机器人配置：
+
+```dotenv
+MESSAGE_CHANNEL=wecom_group_bot
+WECOM_GROUP_BOT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=只保存在服务器环境变量中
+WECOM_MESSAGE_TYPE=markdown
+WECOM_MESSAGE_MAX_CHARS=3500
+```
+
+旧个人微信网关配置示例：
 
 ```dotenv
 WECHAT_GATEWAY_ENDPOINT=https://your-wechat-gateway.example/send
@@ -112,7 +123,7 @@ await wechat.send_text(settings.wechat_recipient, "今日新闻早报")
 
 ```text
 Collect -> Deduplicate -> Cluster -> Rank -> Summarize
-        -> DailyDigest -> WeChatAdapter -> sent/send_failed
+        -> DailyDigest -> MessageChannel -> sent/send_failed
 ```
 
 `DailyDigestService` 使用 `Asia/Singapore` 计算日期，按八大领域生成 Top 3，保留摘要、为什么重要、来源链接和时间。Redis Lock、防重复唯一约束和 `Task` 状态记录分别负责并发、幂等和失败审计。

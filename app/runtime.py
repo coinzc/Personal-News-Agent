@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agent import NewsAgent, SQLAlchemyConversationMemory, build_news_tool_registry
-from app.channels import WeChatAdapter
+from app.channels import MessageChannel, WeChatAdapter, WeComGroupBotAdapter
 from app.config import Settings
 from app.db.session import get_session_factory
 from app.llm import DeepSeekClient, LLMClient
@@ -33,13 +33,28 @@ class ApplicationContainer:
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         redis_client: Redis[Any] | None = None,
         llm_client: LLMClient | None = None,
-        wechat: WeChatAdapter | None = None,
+        wechat: MessageChannel | None = None,
     ) -> None:
         self.settings = settings
         self.session_factory = session_factory or get_session_factory()
         self.redis = redis_client or from_url(settings.redis_url, decode_responses=True)
         self.llm = llm_client
-        self.wechat = wechat or WeChatAdapter(
+        self.wechat = wechat or self._build_channel(settings)
+
+    @staticmethod
+    def _build_channel(settings: Settings) -> MessageChannel:
+        if settings.message_channel == "wecom_group_bot":
+            return WeComGroupBotAdapter(
+                webhook=settings.wecom_group_bot_webhook.get_secret_value()
+                if settings.wecom_group_bot_webhook
+                else None,
+                message_type=settings.wecom_message_type,
+                timeout=settings.wecom_timeout,
+                max_retries=settings.wecom_max_retries,
+                backoff_factor=settings.wecom_backoff_factor,
+                max_chars=settings.wecom_message_max_chars,
+            )
+        return WeChatAdapter(
             endpoint=settings.wechat_gateway_endpoint,
             token=settings.wechat_gateway_token.get_secret_value() if settings.wechat_gateway_token else None,
             timeout=settings.llm_timeout,
@@ -97,14 +112,20 @@ class ApplicationContainer:
 
     async def generate_and_send_daily_digest(self, digest_date: date | None = None) -> Any:
         digest = await self.generate_daily_digest(digest_date)
-        if self.settings.wechat_recipient and self.settings.wechat_gateway_endpoint:
+        channel_ready = (
+            self.settings.wecom_group_bot_webhook is not None
+            if self.settings.message_channel == "wecom_group_bot"
+            else self.settings.wechat_recipient is not None and self.settings.wechat_gateway_endpoint is not None
+        )
+        if channel_ready:
             from app.channels.digest_delivery import DigestDeliveryService
 
             async with self.session_factory() as session:
                 persisted = await session.get(type(digest), digest.id)
                 if persisted is not None:
                     await DigestDeliveryService(session, self.wechat).send_daily_digest(
-                        persisted, self.settings.wechat_recipient
+                        persisted,
+                        self.settings.wechat_recipient or "default",
                     )
         return digest
 

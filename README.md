@@ -2,7 +2,34 @@
 
 基于 FastAPI、PostgreSQL、Redis 和 DeepSeek 的个人智能新闻 Agent。系统目标是持续采集多领域新闻，完成清洗、去重、事件聚类、分类、排序和摘要，并在 `Asia/Singapore` 时区每天 09:00 生成日报，通过可插拔渠道发送。
 
-当前仓库已完成 **应用编排与 API 接线**。FastAPI lifespan 会创建运行时容器，按配置初始化 DeepSeek、Redis、微信适配器和可选 APScheduler；`/api/agent/chat`、`/api/digest/generate` 和 `/api/wechat/webhook` 已接入容器。日报服务在 `Asia/Singapore` 时区按天加载新闻，按八大领域去重并选择 Top 3，保存为 `DailyDigest`，并通过 Redis 锁和数据库唯一约束保证同一天幂等。
+当前仓库已完成 **Phase 1-10：核心功能、应用编排与部署基础设施**。FastAPI lifespan 会创建运行时容器，按配置初始化 DeepSeek、Redis、消息渠道和可选 APScheduler；`/api/agent/chat`、`/api/digest/generate` 和 `/api/wechat/webhook` 已接入容器。日报服务在 `Asia/Singapore` 时区按天加载新闻，按八大领域去重并选择 Top 3，保存为 `DailyDigest`，并通过 Redis 锁和数据库唯一约束保证同一天幂等。
+
+## 架构总览
+
+```text
+RSS/API Sources -> Collectors -> Ingestion -> Dedup/Cluster -> PostgreSQL
+                                                        |
+FastAPI/Nginx -> ApplicationContainer -> Agent/Tools -> DeepSeek
+                                  |                     |
+                                  +-> DailyDigest ------+-> WeChat/WeCom Channel
+                                  +-> Redis Lock/Cache
+                                  +-> APScheduler 09:00 Asia/Singapore
+```
+
+`ApplicationContainer`（`app/runtime.py`）是运行时组合根，负责创建 PostgreSQL Session、Redis、DeepSeek Client、消息渠道和业务服务。Agent 只通过 `ToolRegistry` 访问新闻能力，不直接操作 ORM；日报服务通过注入的步骤和 `MessageChannel` 工作；所有外部客户端都可以在测试中替换为 Fake/Mock。
+
+新闻处理链路为：异步抓取、HTML 清洗、URL 标准化、URL hash 去重、标题规范化、标题相似度、可选 Embedding、NewsEvent 聚类、规则与 LLM 分类、规则加权评分、摘要和日报编排。重复报道不会删除，`event_news` 会保留每个来源。
+
+运行时组件：
+
+- FastAPI：HTTP API 和 OpenAPI 文档。
+- PostgreSQL：新闻、事件、日报、任务和 Agent 会话持久化。
+- Redis：日报分布式锁、缓存和后续任务队列能力。
+- DeepSeek：分类、摘要、排序辅助和 Tool Calling。
+- APScheduler：显式 `Asia/Singapore` 时区的每日 09:00 任务。
+- Nginx：外部反向代理。
+- WeChatAdapter：个人微信网关出站/入站协议。
+- WeComGroupBotAdapter：企业微信群机器人出站消息。
 
 ## 环境要求
 
@@ -35,6 +62,26 @@ docker compose ps
 
 Compose 会启动 backend、PostgreSQL、Redis 和 Nginx，并通过 healthcheck 控制依赖启动顺序。生产环境应替换默认数据库密码、配置防火墙/TLS，并将 `.env` 保存在服务器而不提交到 Git。
 
+### Ubuntu 一键部署
+
+在 Ubuntu 22.04/24.04 的项目目录执行。脚本会在 Docker 缺失时安装 Docker Engine，首次运行时创建并保护 `.env`、生成数据库密码、隐藏读取 DeepSeek 和企业微信群机器人凭据，启动 Compose 服务、执行 Alembic 迁移并检查 `/health`。重复执行会保留现有 `.env` 和数据卷。
+
+```bash
+sudo bash scripts/deploy.sh
+```
+
+非交互部署或暂时不配置外部密钥时可以使用 `--allow-incomplete`；此时服务能启动，但 DeepSeek 和企业微信推送不可用：
+
+```bash
+sudo bash scripts/deploy.sh --allow-incomplete
+```
+
+查看命令选项：
+
+```bash
+sudo bash scripts/deploy.sh --help
+```
+
 ## 数据库迁移
 
 本项目通过 Alembic 管理 PostgreSQL schema，应用默认读取 .env 中的 DATABASE_URL。
@@ -43,28 +90,41 @@ Compose 会启动 backend、PostgreSQL、Redis 和 Nginx，并通过 healthcheck
 
 数据库层使用 SQLAlchemy 2.x typed declarative models 和 async_sessionmaker。NewsItem.url 有数据库唯一约束；NewsEvent 与 NewsItem 通过 event_news association object 建立多对多关系。
 
+## 生产部署流程
+
+Docker Compose 的服务职责是：`backend` 运行 FastAPI/Agent/日报，`postgres` 保存业务数据，`redis` 提供锁和缓存，`nginx` 对外代理。标准部署顺序如下：
+
+1. 克隆仓库并创建权限为 `600` 的 `.env`。
+2. 填写 PostgreSQL、Redis、DeepSeek 和消息渠道配置。
+3. 执行 `docker compose up -d --build`。
+4. 执行 `docker compose exec backend python -m app.db.init_db`。
+5. 访问 `/health`、`/docs`，查看 `docker compose logs -f backend`。
+
+生产环境只开放 SSH、80 和 443，不公开 PostgreSQL 5432 或 Redis 6379。Webhook 使用 HTTPS，真实密钥、数据库密码、微信 webhook URL 和备份文件都不能提交 Git。完整 Ubuntu、UFW、TLS、备份和升级流程见 [UBUNTU_DEPLOYMENT.md](UBUNTU_DEPLOYMENT.md)。
+
 ## 目录约定
 
 ```text
 app/
-|-- api/             # HTTP 路由
-|-- agent/           # DeepSeek Agent（后续阶段）
-|-- cache/           # Redis 缓存与分布式锁（后续阶段）
-|-- channels/        # 微信等消息渠道（后续阶段）
-|-- collectors/      # RSS/API Collector（后续阶段）
+|-- api/             # health、Agent、日报、微信 webhook
+|-- agent/           # Tool Calling Agent、工具、Planner、Memory
+|-- cache/           # Redis 扩展点
+|-- channels/        # 个人微信、企业微信和日报发送
+|-- collectors/      # BaseCollector、RSS/API Collector
 |-- config.py        # Pydantic Settings 配置
 |-- db/              # 数据库会话、Base 与迁移
-|-- llm/             # DeepSeek 统一封装（后续阶段）
+|-- llm/             # DeepSeek 统一封装和结构化输出
 |-- logging_config.py
 |-- models/          # SQLAlchemy ORM 模型
 |-- schemas/         # Pydantic API 模型
-|-- scheduler/       # APScheduler 任务（后续阶段）
-|-- services/        # 业务服务（后续阶段）
+|-- runtime.py       # ApplicationContainer 运行时组合根
+|-- scheduler/       # APScheduler 09:00 任务
+|-- services/        # 采集、去重、聚类、查询、LLM、日报服务
 |-- utils/           # 通用工具（后续阶段）
 `-- main.py          # 应用工厂和入口
 tests/               # 单元、集成和 API 测试
 docker/              # Nginx 等部署配置
-prompts/             # 版本化 Prompt 模板（后续阶段）
+prompts/             # 版本化 Prompt 模板
 ```
 
 ## 分阶段路线图
@@ -79,11 +139,34 @@ prompts/             # 版本化 Prompt 模板（后续阶段）
 8. 每日日报流水线（已完成）
 9. 微信适配器（已完成）
 10. 应用编排与 API 接线（已完成）
-11. Docker 生产化
-12. 完整测试
+11. Docker/Ubuntu 生产化（已完成）
+12. 完整测试与代码质量（已完成）
 13. 监控、限流与性能优化
 
 每个阶段都会先检查现有结构，完成实现后运行相关测试并更新本文档。
+
+## Git 管理
+
+当前仓库已连接到 GitHub：
+
+```text
+origin git@github.com:coinzc/Personal-News-Agent.git
+```
+
+日常开发流程：
+
+```bash
+git status
+git diff
+pytest
+ruff check app tests
+mypy app
+git add README.md app tests docker-compose.yml Dockerfile .env.example
+git commit -m "docs: document architecture and deployment"
+git push origin main
+```
+
+`.env`、真实 API Key、微信 webhook、数据库备份和运行日志不得提交。提交前检查 `git diff --cached --check` 和 `git diff --cached --name-only`。
 ## Phase 3 Collector
 
 `BaseCollector` 定义异步采集契约，`collect_many` 使用 `asyncio.gather(..., return_exceptions=True)` 隔离单个源的失败。`RSSCollector` 通过 `httpx.AsyncClient` 和 `feedparser` 处理 RSS/Atom，支持超时、DNS/连接错误、429/5xx 指数退避重试；其他 4xx 直接失败。解析结果会提取标题、链接、作者、发布时间、正文和图片，正文会移除脚本/样式节点，URL 会移除 fragment、默认端口和 `utm_*`/`fbclid`/`gclid` 追踪参数。
@@ -152,13 +235,13 @@ pytest --cov=app
 
 ## Phase 8 微信适配器与日报推送
 
-当前微信范围是个人微信接收日报和消息，不接入企业微信或公众号作为接收渠道。`app/channels/base.py` 定义 provider-neutral 的 MessageChannel，`app/channels/wechat.py` 提供 WeChatAdapter：可注入微信网关/webhook 或测试 sender，支持超时、429/5xx/网络错误指数退避，以及按 max_chars 按行分片发送。
+消息渠道通过 `app/channels/base.py` 的 provider-neutral `MessageChannel` 抽象接入。生产推荐使用 `WeComGroupBotAdapter`：服务器调用企业微信群机器人 Webhook，个人微信作为企业微信群成员接收日报。适配器支持 text/markdown、超时、429/5xx/网络错误指数退避，以及按 UTF-8 字节限制分片发送。原 `WeChatAdapter` 保留用于兼容已有个人微信网关部署。
 
 DigestDeliveryService 负责将 DailyDigest 发送到微信 recipient；成功写入 sent_at 并将状态改为 sent，失败写入 send_failed 和错误信息。Phase 8 测试使用 httpx.MockTransport 和注入 sender，不访问真实微信服务。
 
 ## 应用编排与 API 接线
 
-`app/runtime.py` 提供 `ApplicationContainer`，统一持有 Redis、DeepSeek 和 WeChatAdapter，并为每次 Agent/日报请求创建独立 SQLAlchemy Session。FastAPI lifespan 在启动时创建容器，在关闭时释放 LLM、Redis 和 APScheduler 资源；设置 `ENABLE_SCHEDULER=true` 后，调度器会在 `Asia/Singapore` 每天 09:00 执行生成并发送日报。
+`app/runtime.py` 提供 `ApplicationContainer`，统一持有 Redis、DeepSeek 和配置选择的消息通道，并为每次 Agent/日报请求创建独立 SQLAlchemy Session。设置 `MESSAGE_CHANNEL=wecom_group_bot` 和 `WECOM_GROUP_BOT_WEBHOOK` 后使用企业微信群机器人；设置 `ENABLE_SCHEDULER=true` 后，调度器会在 `Asia/Singapore` 每天 09:00 执行生成并发送日报。
 
 当前 API：
 
