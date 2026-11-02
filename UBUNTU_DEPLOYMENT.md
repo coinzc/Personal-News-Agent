@@ -138,6 +138,8 @@ sudo ufw enable
 
 Do not expose PostgreSQL port 5432 or Redis port 6379. Use HTTPS for the webhook. The bundled Nginx listens on port 80; add TLS at the host/proxy layer or use Certbot after DNS points to this server.
 
+The bundled Nginx resolves the Compose service name `backend` through Docker's embedded DNS (`127.0.0.11`) at request time. This avoids stale backend container IPs during container replacement.
+
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d YOUR_DOMAIN

@@ -62,6 +62,8 @@ docker compose ps
 
 Compose 会启动 backend、PostgreSQL、Redis 和 Nginx，并通过 healthcheck 控制依赖启动顺序。生产环境应替换默认数据库密码、配置防火墙/TLS，并将 `.env` 保存在服务器而不提交到 Git。
 
+Nginx 使用 Docker 内置 DNS `127.0.0.11` 动态解析 `backend:8000`，不会在启动时把 backend 容器 IP 固定在静态 upstream 中。backend 容器重建后，Nginx 会按配置的 10 秒 DNS 有效期刷新地址。
+
 ### Ubuntu 一键部署
 
 在 Ubuntu 22.04/24.04 的项目目录执行。脚本会在 Docker 缺失时安装 Docker Engine，首次运行时创建并保护 `.env`、生成数据库密码、隐藏读取 DeepSeek 和企业微信群机器人凭据，启动 Compose 服务、执行 Alembic 迁移并检查 `/health`。重复执行会保留现有 `.env` 和数据卷。
