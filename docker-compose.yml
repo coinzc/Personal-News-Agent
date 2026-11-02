@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     env_file:
       - .env
+    volumes:
+      - ./prompts:/app/prompts:ro
     depends_on:
       postgres:
         condition: service_healthy
