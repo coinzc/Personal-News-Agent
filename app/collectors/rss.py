@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class RSSCollector(BaseCollector):
+    _USER_AGENT = "PersonalNewsAgent/0.1 (+https://github.com/coinzc/Personal-News-Agent)"
+
     def __init__(
         self,
         *,
@@ -62,11 +64,18 @@ class RSSCollector(BaseCollector):
 
     async def _fetch(self, url: str) -> bytes:
         owns = self._client is None
-        client = self._client or httpx.AsyncClient(timeout=self.timeout)
+        client = self._client or httpx.AsyncClient(
+            timeout=self.timeout,
+            follow_redirects=True,
+            headers={
+                "User-Agent": self._USER_AGENT,
+                "Accept": "application/rss+xml, application/atom+xml, text/xml;q=0.9, */*;q=0.8",
+            },
+        )
         try:
             for attempt in range(self.max_retries + 1):
                 try:
-                    response = await client.get(url, timeout=self.timeout)
+                    response = await client.get(url, timeout=self.timeout, follow_redirects=True)
                     status = response.status_code
                     if 400 <= status < 500 and status != 429:
                         raise CollectorHTTPError(status, url)
@@ -81,7 +90,7 @@ class RSSCollector(BaseCollector):
                 except (httpx.TimeoutException, httpx.RequestError) as exc:
                     if attempt >= self.max_retries:
                         raise CollectorHTTPError(None, url) from exc
-                    logger.warning("RSS fetch failed for %s: %s", url, exc)
+                    logger.warning("RSS fetch failed for %s (%s): %s", url, type(exc).__name__, exc or "no details")
                 if attempt < self.max_retries:
                     await asyncio.sleep(self.backoff_factor * 2**attempt)
             raise CollectorHTTPError(None, url)

@@ -32,6 +32,18 @@ async def test_parse_clean_and_normalize() -> None:
     assert item.published_at.isoformat() == "2024-01-02T03:04:05+00:00"
 
 
+@pytest.mark.asyncio
+async def test_follow_redirects() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/rss":
+            return httpx.Response(307, headers={"location": "/feed"}, request=request)
+        return httpx.Response(200, content=RSS.encode(), request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        items = await RSSCollector(client=client, backoff_factor=0).collect(source("https://feed.test/rss"))
+    assert len(items) == 1
+
+
 def test_helpers() -> None:
     assert RSSCollector.normalize_url("HTTP://Example.COM:80/p/?utm_x=1&ok=2#f") == "http://example.com/p?ok=2"
     assert RSSCollector.clean_html("<p>A</p><script>x</script>") == "A"
