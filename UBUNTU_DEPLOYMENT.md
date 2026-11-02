@@ -32,7 +32,7 @@ For a one-command deployment from an already cloned checkout, run:
 sudo bash scripts/deploy.sh
 ```
 
-The script installs Docker on Ubuntu when needed, creates `.env` with mode `600`, generates a database password, reads the DeepSeek key and Enterprise WeChat group bot webhook without echoing them, starts the stack, runs migrations, and checks `/health`. Re-running it preserves `.env` and named volumes. Use `--allow-incomplete` only for an infrastructure smoke test without external credentials.
+The script installs Docker on Ubuntu when needed, creates `.env` with mode `600`, generates a database password, reads the DeepSeek key and Enterprise WeChat group bot webhook without echoing them, starts the stack, synchronizes the PostgreSQL role password with `.env`, runs migrations, and checks `/health`. Re-running it preserves `.env` and named volumes. Use `--allow-incomplete` only for an infrastructure smoke test without external credentials.
 
 ```bash
 sudo mkdir -p /opt/personal-news-agent

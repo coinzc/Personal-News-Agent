@@ -99,8 +99,9 @@ Docker Compose 的服务职责是：`backend` 运行 FastAPI/Agent/日报，`pos
 1. 克隆仓库并创建权限为 `600` 的 `.env`。
 2. 填写 PostgreSQL、Redis、DeepSeek 和消息渠道配置。
 3. 执行 `docker compose up -d --build`。
-4. 执行 `docker compose exec backend python -m app.db.init_db`。
-5. 访问 `/health`、`/docs`，查看 `docker compose logs -f backend`。
+4. 将 PostgreSQL 角色密码同步为 `.env` 中的 `POSTGRES_PASSWORD`。
+5. 执行 `docker compose exec backend python -m app.db.init_db`。
+6. 访问 `/health`、`/docs`，查看 `docker compose logs -f backend`。
 
 生产环境只开放 SSH、80 和 443，不公开 PostgreSQL 5432 或 Redis 6379。Webhook 使用 HTTPS，真实密钥、数据库密码、微信 webhook URL 和备份文件都不能提交 Git。完整 Ubuntu、UFW、TLS、备份和升级流程见 [UBUNTU_DEPLOYMENT.md](UBUNTU_DEPLOYMENT.md)。
 

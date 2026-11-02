@@ -171,6 +171,22 @@ done
 [[ "$postgres_status" == *healthy* ]] || fail "PostgreSQL did not become healthy; inspect: docker compose logs postgres"
 [[ "$redis_status" == *healthy* ]] || fail "Redis did not become healthy; inspect: docker compose logs redis"
 
+sync_database_password() {
+  [[ "$POSTGRES_USER" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail "POSTGRES_USER contains unsupported characters"
+  log "Synchronizing PostgreSQL role password with .env"
+  # The official PostgreSQL image allows local socket access from inside the
+  # database container. This updates an existing named volume when .env was
+  # regenerated, without deleting any database data.
+  docker compose exec -T postgres psql \
+    -U "$POSTGRES_USER" \
+    -d "$POSTGRES_DB" \
+    -v ON_ERROR_STOP=1 \
+    -v app_password="$POSTGRES_PASSWORD" \
+    -c "ALTER ROLE \"$POSTGRES_USER\" PASSWORD :'app_password';"
+}
+
+sync_database_password
+
 log "Applying database migrations"
 docker compose exec -T backend python -m app.db.init_db
 
