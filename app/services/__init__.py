@@ -7,6 +7,7 @@ from app.services.digest_service import (
     DigestGenerationError,
 )
 from app.services.news_clustering_service import NewsClusteringService
+from app.services.news_collection_service import NewsCollectionService
 from app.services.news_dedup_service import (
     DeduplicationConfig,
     DeduplicationMatch,
@@ -29,6 +30,7 @@ __all__ = [
     "EmbeddingSimilarityProvider",
     "MockEmbeddingProvider",
     "NewsClusteringService",
+    "NewsCollectionService",
     "NewsClassifier",
     "NewsDedupService",
     "NewsRanker",

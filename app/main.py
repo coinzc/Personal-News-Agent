@@ -29,7 +29,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.container = container
         scheduler = None
         if app_settings.enable_scheduler:
-            scheduler = build_scheduler(container.generate_and_send_daily_digest, timezone=app_settings.timezone)
+            scheduler = build_scheduler(
+                container.generate_and_send_daily_digest,
+                run_collect=container.collect_news,
+                collection_interval_minutes=app_settings.news_collection_interval_minutes,
+                timezone=app_settings.timezone,
+            )
             scheduler.start()
             app.state.scheduler = scheduler
         logger.info("Starting {} v{}", app_settings.app_name, __version__)

@@ -17,7 +17,13 @@ from app.config import Settings
 from app.db.session import get_session_factory
 from app.llm import DeepSeekClient, LLMClient
 from app.models import User
-from app.services import DailyDigestService, NewsRanker, NewsSummarizer, SQLAlchemyNewsToolService
+from app.services import (
+    DailyDigestService,
+    NewsCollectionService,
+    NewsRanker,
+    NewsSummarizer,
+    SQLAlchemyNewsToolService,
+)
 
 logger = logging.getLogger(__name__)
 _DEFAULT_USER_NAME = "Personal News Agent"
@@ -109,6 +115,10 @@ class ApplicationContainer:
                 summarize=summary_step,
             )
             return await service.generate_daily_digest(digest_date)
+
+    async def collect_news(self) -> dict[str, Any]:
+        async with self.session_factory() as session:
+            return await NewsCollectionService(session).collect_enabled_sources()
 
     async def generate_and_send_daily_digest(self, digest_date: date | None = None) -> Any:
         digest = await self.generate_daily_digest(digest_date)

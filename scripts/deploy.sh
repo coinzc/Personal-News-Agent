@@ -192,6 +192,12 @@ sync_database_password
 log "Applying database migrations"
 docker compose exec -T backend python -m app.db.init_db
 
+log "Seeding default RSS sources"
+docker compose exec -T backend python -m app.db.seed_sources
+
+log "Running initial RSS collection"
+docker compose exec -T backend python -c "import asyncio; from app.runtime import ApplicationContainer; from app.config import get_settings; c=ApplicationContainer.from_settings(get_settings()); print(asyncio.run(c.collect_news())); asyncio.run(c.aclose())"
+
 log "Waiting for HTTP health endpoint"
 deadline=$((SECONDS + HEALTH_TIMEOUT))
 until curl -fsS http://127.0.0.1/health >/dev/null 2>&1; do

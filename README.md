@@ -101,7 +101,9 @@ Docker Compose 的服务职责是：`backend` 运行 FastAPI/Agent/日报，`pos
 3. 执行 `docker compose up -d --build`。
 4. 将 PostgreSQL 角色密码同步为 `.env` 中的 `POSTGRES_PASSWORD`。
 5. 执行 `docker compose exec backend python -m app.db.init_db`。
-6. 访问 `/health`、`/docs`，查看 `docker compose logs -f backend`。
+6. 执行 `docker compose exec backend python -m app.db.seed_sources` 初始化八个领域的默认 RSS 源。
+7. 部署脚本会执行一次首轮 RSS 采集；之后由 scheduler 按 `NEWS_COLLECTION_INTERVAL_MINUTES` 周期采集。
+8. 访问 `/health`、`/docs`，查看 `docker compose logs -f backend`。
 
 生产环境只开放 SSH、80 和 443，不公开 PostgreSQL 5432 或 Redis 6379。Webhook 使用 HTTPS，真实密钥、数据库密码、微信 webhook URL 和备份文件都不能提交 Git。完整 Ubuntu、UFW、TLS、备份和升级流程见 [UBUNTU_DEPLOYMENT.md](UBUNTU_DEPLOYMENT.md)。
 
@@ -253,3 +255,9 @@ DigestDeliveryService 负责将 DailyDigest 发送到微信 recipient；成功�
 - `POST /api/wechat/webhook`：接收微信网关转发的消息并交给 Agent，可用 `X-WeChat-Webhook-Token` 校验。
 
 真实端到端运行需要填写 DeepSeek API Key、PostgreSQL/Redis 配置，并提供个人微信网关 endpoint；未配置 DeepSeek 时 Agent API 返回 503。
+
+## RSS 采集调度
+
+`NewsCollectionService` 已接入 scheduler：默认每 `NEWS_COLLECTION_INTERVAL_MINUTES=30` 分钟执行一次，并在 scheduler 启动时立即执行首轮采集。每轮流程为启用的 RSS 源异步抓取、`NewsIngestionService` URL 去重入库、`NewsClusteringService.cluster_pending()` 事件聚类；单个源失败不会影响其他源，结果写入 `tasks`。
+
+部署脚本会执行 `python -m app.db.seed_sources`，为 AI、科技、编程、财经、商业、国际、科学、游戏各写入一个默认 RSS 源，并立即运行一次采集。默认源可在数据库中禁用或替换。
