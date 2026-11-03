@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
@@ -13,6 +14,28 @@ from app.channels.base import MessageChannel
 from app.models.digest import DailyDigest
 
 logger = logging.getLogger(__name__)
+
+_CATEGORY_ORDER = ("AI", "科技", "编程", "财经", "商业", "国际", "科学")
+_CATEGORY_EMOJIS = {
+    "AI": "🤖",
+    "科技": "💻",
+    "编程": "👨‍💻",
+    "财经": "📈",
+    "商业": "💼",
+    "国际": "🌍",
+    "科学": "🔬",
+}
+
+
+def _clean_display_text(value: object, *, fallback: str) -> str:
+    """Remove provider-added interaction metadata from user-facing text."""
+
+    text = str(value or fallback).strip()
+    text = re.sub(r"(?:点赞数|点赞|likes?)\s*[:：]?\s*\d+", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?:评论数|评论|comments?)\s*[:：]?\s*\d+", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*[|｜]\s*", " ", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    return re.sub(r"^[\s|｜,，;；-]+|[\s|｜,，;；-]+$", "", text) or fallback
 
 
 class DigestDeliveryService:
@@ -28,38 +51,47 @@ class DigestDeliveryService:
         categories = payload.get("categories", {})
         if not isinstance(categories, dict):
             categories = {}
-        active = [(str(category), rows) for category, rows in categories.items() if isinstance(rows, list) and rows]
+        available = {
+            str(category): rows
+            for category, rows in categories.items()
+            if str(category) in _CATEGORY_ORDER and isinstance(rows, list) and rows
+        }
+        active = [(category, available[category]) for category in _CATEGORY_ORDER if category in available]
         all_rows = [row for _, rows in active for row in rows if isinstance(row, dict)]
         separator = "━━━━━━━━━━━━━━"
         lines = [
             "今日新闻早报",
             f"{digest.digest_date.isoformat()} 09:00（北京时间）",
             "",
-            separator,
-            "今日头条",
-            separator,
         ]
-        if all_rows:
-            lines.extend(DigestDeliveryService._format_compact_rows(all_rows[:3]))
-        else:
-            lines.append("暂无可用新闻")
         links: list[dict[str, Any]] = []
         seen_urls: set[str] = set()
         for category, rows in active:
-            lines.extend(["", separator, category, separator])
+            lines.extend(["", separator, f"{_CATEGORY_EMOJIS[category]} {category}", separator])
             lines.extend(DigestDeliveryService._format_compact_rows(rows[:3]))
             for row in rows[:3]:
                 if isinstance(row, dict) and row.get("url") and row["url"] not in seen_urls:
                     seen_urls.add(str(row["url"]))
                     links.append(row)
-        lines.extend(["", separator, "今日趋势", separator, str(payload.get("trend_analysis") or "暂无趋势分析")])
+        if not all_rows:
+            lines.extend(["", separator, "暂无可用新闻", separator])
+        trend = _clean_display_text(payload.get("trend_analysis"), fallback="暂无趋势分析")
+        lines.extend(["", separator, "今日趋势", separator, trend])
         lines.extend(["", separator, "今日最值得关注的 3 件事", separator])
-        top_titles = [f"{index}. {row.get('title', '未命名新闻')}" for index, row in enumerate(all_rows[:3], 1)]
+        top_titles = [
+            f"{index}. {_clean_display_text(row.get('title'), fallback='未命名新闻')}"
+            for index, row in enumerate(all_rows[:3], 1)
+        ]
         lines.extend(top_titles or ["暂无可用新闻"])
         if links:
             lines.extend(["", separator, "原文链接", separator])
             for index, row in enumerate(links, 1):
-                lines.extend([f"{index}. {row.get('title', '未命名新闻')}", f"   {row['url']}"])
+                lines.extend(
+                    [
+                        f"{index}. {_clean_display_text(row.get('title'), fallback='未命名新闻')}",
+                        f"   {row['url']}",
+                    ]
+                )
         return "\n".join(lines)
 
     @staticmethod
@@ -68,8 +100,8 @@ class DigestDeliveryService:
         for index, row in enumerate(rows, 1):
             lines.extend(
                 [
-                    f"{index}. {row.get('title', '未命名新闻')}",
-                    f"   {row.get('summary', '暂无摘要')}",
+                    f"{index}. {_clean_display_text(row.get('title'), fallback='未命名新闻')}",
+                    f"   {_clean_display_text(row.get('summary'), fallback='暂无摘要')}",
                     f"   时间：{row.get('published_at', '时间未知')}｜来源：{row.get('source_name', '未知来源')}",
                 ]
             )

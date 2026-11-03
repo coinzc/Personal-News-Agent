@@ -44,7 +44,7 @@ async def test_daily_digest_generates_all_sections_and_is_idempotent(tmp_path):
         assert "https://example.test/a" in digest.content
         assert "时间：2026-09-10 10:00" in digest.content
         assert "为什么重要" not in digest.content
-        assert set(digest.sections["categories"]) == {"AI", "科技", "编程", "财经", "商业", "国际", "科学", "游戏"}
+        assert set(digest.sections["categories"]) == {"AI", "科技", "编程", "财经", "商业", "国际", "科学"}
     await engine.dispose()
 
 
@@ -191,3 +191,53 @@ def test_compact_delivery_hides_empty_categories() -> None:
     assert "为什么重要" not in content
     assert "2026-09-10 10:00" in content
     assert "原文链接" in content
+
+
+def test_compact_delivery_all_empty_shows_only_overall_notice() -> None:
+    digest = DailyDigest(
+        digest_date=date(2026, 9, 10),
+        timezone="Asia/Shanghai",
+        status="completed",
+        sections={"categories": {"AI": [], "游戏": []}, "trend_analysis": ""},
+    )
+    content = DigestDeliveryService.compact_content(digest)
+    assert "暂无可用新闻" in content
+    assert "🤖" not in content
+    assert "游戏" not in content
+
+
+def test_compact_delivery_uses_category_emojis_and_omits_headline_and_game() -> None:
+    digest = DailyDigest(
+        digest_date=date(2026, 9, 10),
+        timezone="Asia/Shanghai",
+        status="completed",
+        sections={
+            "categories": {
+                "AI": [
+                    {
+                        "title": "OpenAI 发布新模型",
+                        "summary": "模型能力升级，面向开发者开放。",
+                        "published_at": "2026-09-10 10:00",
+                        "source_name": "OpenAI",
+                        "url": "https://example.test/a",
+                    }
+                ],
+                "游戏": [
+                    {
+                        "title": "游戏新闻",
+                        "summary": "不应出现在日报中。",
+                        "published_at": "2026-09-10 10:00",
+                        "source_name": "Games",
+                        "url": "https://example.test/game",
+                    }
+                ],
+            },
+            "trend_analysis": "AI 点赞数：12，评论数：3。",
+        },
+    )
+    content = DigestDeliveryService.compact_content(digest)
+    assert "🤖 AI" in content
+    assert "今日头条" not in content
+    assert "游戏新闻" not in content
+    assert "点赞数" not in content
+    assert "评论数" not in content

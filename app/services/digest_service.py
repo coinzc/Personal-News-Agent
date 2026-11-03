@@ -27,7 +27,7 @@ from app.models.task import Task
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CATEGORIES: tuple[str, ...] = ("AI", "科技", "编程", "财经", "商业", "国际", "科学", "游戏")
+DEFAULT_CATEGORIES: tuple[str, ...] = ("AI", "科技", "编程", "财经", "商业", "国际", "科学")
 
 
 class DigestLock(Protocol):

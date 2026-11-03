@@ -18,6 +18,7 @@ from app.llm.schemas import (
     NewsRanking,
     NewsRankingFactors,
     NewsSummary,
+    NewsTranslation,
     TokenUsage,
 )
 
@@ -37,5 +38,6 @@ __all__ = [
     "NewsRanking",
     "NewsRankingFactors",
     "NewsSummary",
+    "NewsTranslation",
     "TokenUsage",
 ]

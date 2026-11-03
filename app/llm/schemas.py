@@ -53,11 +53,19 @@ class NewsSummary(StrictLLMSchema):
     # Providers occasionally add harmless metadata or omit provenance while
     # translating long articles; the service restores the trusted source URL.
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
-    summary: str = Field(min_length=1, max_length=2_000)
+    summary: str | None = Field(default=None, max_length=2_000)
     key_points: list[str] = Field(default_factory=list, max_length=8)
     source_url: HttpUrl | None = None
     title_zh: str | None = Field(default=None, max_length=500)
     summary_zh: str | None = Field(default=None, max_length=2_000)
+
+
+class NewsTranslation(StrictLLMSchema):
+    """Dedicated Simplified Chinese translation for delivery text."""
+
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+    title_zh: str = Field(min_length=1, max_length=500)
+    summary_zh: str = Field(min_length=1, max_length=2_000)
 
 
 class NewsRanking(StrictLLMSchema):

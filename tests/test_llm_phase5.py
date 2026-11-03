@@ -168,6 +168,14 @@ class StubClient(LLMClient):
         return LLMResponse(content=self.content, model="fake", latency_ms=1.0)
 
 
+class SequenceClient(LLMClient):
+    def __init__(self, contents: list[str]) -> None:
+        self.contents = contents
+
+    async def complete(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> LLMResponse:
+        return LLMResponse(content=self.contents.pop(0), model="fake", latency_ms=1.0)
+
+
 @pytest.mark.asyncio
 async def test_structured_client_rejects_invalid_json_and_schema() -> None:
     with pytest.raises(LLMInvalidResponseError, match="valid JSON"):
@@ -229,3 +237,31 @@ async def test_news_summary_tolerates_provider_metadata_and_missing_source_url()
     assert summary.title_zh == "中文标题"
     assert summary.summary_zh == "中文摘要"
     assert str(summary.source_url) == item.url
+
+
+@pytest.mark.asyncio
+async def test_news_summarizer_requests_translation_when_chinese_fields_are_missing() -> None:
+    item = NewsItem(
+        title="OpenAI announces new model",
+        url="https://example.test/news/translation",
+        category="AI",
+        summary="OpenAI announced a new model.",
+    )
+    client = SequenceClient(
+        [
+            json.dumps({"summary": "OpenAI announced a new model."}),
+            json.dumps({"title_zh": "OpenAI 发布新模型", "summary_zh": "OpenAI 发布了一款新模型。"}),
+        ]
+    )
+    summary = await NewsSummarizer(client).summarize(item)
+    assert summary.title_zh == "OpenAI 发布新模型"
+    assert summary.summary_zh == "OpenAI 发布了一款新模型。"
+
+
+@pytest.mark.asyncio
+async def test_news_summarizer_accepts_chinese_fields_without_english_summary() -> None:
+    item = NewsItem(title="OpenAI announces new model", url="https://example.test/news/zh", category="AI")
+    client = StubClient(json.dumps({"title_zh": "OpenAI 发布新模型", "summary_zh": "OpenAI 发布了一款新模型。"}))
+    summary = await NewsSummarizer(client).summarize(item)
+    assert summary.title_zh == "OpenAI 发布新模型"
+    assert summary.summary_zh == "OpenAI 发布了一款新模型。"

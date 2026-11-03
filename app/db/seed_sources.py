@@ -17,7 +17,6 @@ DEFAULT_RSS_SOURCES = (
     ("The Guardian Business", "https://www.theguardian.com/business/rss", "商业", "en", "GB", 70),
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml", "国际", "en", "GB", 80),
     ("ScienceDaily", "https://www.sciencedaily.com/rss/top/science.xml", "科学", "en", "US", 70),
-    ("Eurogamer", "https://www.eurogamer.net/feed", "游戏", "en", "GB", 60),
 )
 
 
