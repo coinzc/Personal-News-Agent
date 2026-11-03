@@ -144,6 +144,7 @@ class DailyDigestService:
             else:
                 digest.status = "running"
                 digest.error_message = None
+                digest.timezone = self.timezone
             await self.session.flush()
             try:
                 items = await self._load_items(target_date)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pydantic import HttpUrl
+
 from app.llm.client import LLMClient
 from app.llm.schemas import NewsClassification, NewsRanking, NewsRankingFactors, NewsSummary
 from app.models.news import NewsItem
@@ -56,7 +58,10 @@ class NewsSummarizer:
             },
             {"role": "user", "content": _article_context(item)},
         ]
-        return await self.client.complete_structured(messages, NewsSummary)
+        result = await self.client.complete_structured(messages, NewsSummary)
+        # Provenance comes from our database, never from model output.
+        result.source_url = HttpUrl(item.url)
+        return result
 
 
 class NewsRanker:

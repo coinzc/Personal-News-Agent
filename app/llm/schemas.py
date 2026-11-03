@@ -50,9 +50,12 @@ class NewsClassification(StrictLLMSchema):
 class NewsSummary(StrictLLMSchema):
     """Grounded summary output for an article."""
 
+    # Providers occasionally add harmless metadata or omit provenance while
+    # translating long articles; the service restores the trusted source URL.
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
     summary: str = Field(min_length=1, max_length=2_000)
     key_points: list[str] = Field(default_factory=list, max_length=8)
-    source_url: HttpUrl
+    source_url: HttpUrl | None = None
     title_zh: str | None = Field(default=None, max_length=500)
     summary_zh: str | None = Field(default=None, max_length=2_000)
 

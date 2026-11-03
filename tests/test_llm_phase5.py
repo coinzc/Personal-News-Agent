@@ -210,3 +210,22 @@ async def test_news_classifier_summarizer_and_ranker_use_injected_client() -> No
     )
     ranking = await NewsRanker(ranker_client).rank(item)
     assert ranking.importance_score == 82.0
+
+
+@pytest.mark.asyncio
+async def test_news_summary_tolerates_provider_metadata_and_missing_source_url() -> None:
+    item = NewsItem(title="标题", url="https://example.test/news", category="AI", content="内容")
+    client = StubClient(
+        json.dumps(
+            {
+                "title_zh": "中文标题",
+                "summary_zh": "中文摘要",
+                "summary": "English summary",
+                "extra_metadata": {"provider": "deepseek"},
+            }
+        )
+    )
+    summary = await NewsSummarizer(client).summarize(item)
+    assert summary.title_zh == "中文标题"
+    assert summary.summary_zh == "中文摘要"
+    assert str(summary.source_url) == item.url
