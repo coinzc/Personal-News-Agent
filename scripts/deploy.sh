@@ -154,7 +154,9 @@ log "Validating Compose configuration"
 docker compose config >/dev/null
 
 log "Building and starting services"
-docker compose up -d --build
+# Recreate containers so changes in .env (including timezone and channel
+# settings) are applied instead of retaining the previous container env.
+docker compose up -d --build --force-recreate
 
 log "Waiting for PostgreSQL and Redis health checks"
 deadline=$((SECONDS + HEALTH_TIMEOUT))
