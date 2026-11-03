@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
+from app.llm.client import LLMInvalidResponseError
 from app.models.digest import DailyDigest
 from app.models.news import NewsItem
 from app.models.task import Task
@@ -206,8 +207,17 @@ class DailyDigestService:
                     seen_events.add(event_id)
                 summary = (item.summary or item.title).strip()
                 if self.summarize is not None:
-                    result = await self.summarize(item)
-                    summary = str(result.get("summary") or summary)
+                    try:
+                        result = await self.summarize(item)
+                        summary = str(result.get("summary") or summary)
+                    except LLMInvalidResponseError as exc:
+                        # A malformed response for one article must not discard
+                        # the whole digest; use the grounded RSS summary instead.
+                        logger.warning(
+                            "News summary schema validation failed; using source summary news_id=%s error=%s",
+                            item.id,
+                            exc,
+                        )
                 rows.append(
                     {
                         "title": item.title,

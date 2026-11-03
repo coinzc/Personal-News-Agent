@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 from app.db.base import Base
+from app.llm.client import LLMInvalidResponseError
 from app.models import DailyDigest, NewsItem, NewsSource, User
 from app.services.digest_service import DailyDigestService, DigestGenerationError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -87,4 +88,36 @@ async def test_daily_digest_summarizer_failure_records_failed_task(tmp_path):
             DailyDigest, (await session.execute(__import__("sqlalchemy").select(DailyDigest))).scalars().first().id
         )
         assert failed.status == "failed"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_daily_digest_falls_back_on_invalid_summary_json(tmp_path):
+    engine = await make_session(tmp_path)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        user = User(display_name="Malformed summary")
+        source = NewsSource(name="Test", url="https://example.test/fallback", source_type="rss", category="AI")
+        session.add_all([user, source])
+        await session.flush()
+        session.add(
+            NewsItem(
+                source_id=source.id,
+                title="Fallback headline",
+                url="https://example.test/fallback/article",
+                category="AI",
+                language="en",
+                summary="Grounded RSS summary.",
+                published_at=datetime(2026, 9, 10, tzinfo=UTC),
+            )
+        )
+        await session.commit()
+
+        async def malformed_summary(item):
+            raise LLMInvalidResponseError("LLM JSON did not match the expected schema")
+
+        digest = await DailyDigestService(session, user_id=user.id, summarize=malformed_summary).generate_daily_digest(
+            date(2026, 9, 10)
+        )
+        assert digest.status == "completed"
+        assert "Grounded RSS summary." in digest.content
     await engine.dispose()
