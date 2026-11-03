@@ -146,6 +146,7 @@ set_env DEBUG false
 set_env TIMEZONE Asia/Shanghai
 set_env MESSAGE_CHANNEL wecom_group_bot
 set_env ENABLE_SCHEDULER true
+set_env WECOM_MESSAGE_MAX_CHARS 3000
 
 prompt_secret DEEPSEEK_API_KEY "Enter DeepSeek API key (hidden)"
 prompt_secret WECOM_GROUP_BOT_WEBHOOK "Enter Enterprise WeChat group bot webhook (hidden)"

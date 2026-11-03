@@ -40,28 +40,31 @@ class WeComGroupBotAdapter(MessageChannel):
         self._client = client
         self._sender = sender
 
-    def split_message(self, content: str) -> list[str]:
+    def split_message(self, content: str, *, max_bytes: int | None = None) -> list[str]:
         """Split on lines and keep each UTF-8 payload within the configured limit."""
 
         if not content:
             raise ValueError("content must not be empty")
+        limit = self.max_chars if max_bytes is None else max_bytes
+        if limit <= 0:
+            raise ValueError("max_bytes must be positive")
         chunks: list[str] = []
         current = ""
         for line in content.splitlines(keepends=True):
-            if len((current + line).encode("utf-8")) <= self.max_chars:
+            if len((current + line).encode("utf-8")) <= limit:
                 current += line
                 continue
             if current:
                 chunks.append(current.rstrip())
                 current = ""
-            while len(line.encode("utf-8")) > self.max_chars:
-                cut = self._safe_cut(line, self.max_chars)
+            while len(line.encode("utf-8")) > limit:
+                cut = self._safe_cut(line, limit)
                 chunks.append(line[:cut])
                 line = line[cut:]
             current = line
         if current:
             chunks.append(current.rstrip())
-        return chunks or [content[: self._safe_cut(content, self.max_chars)]]
+        return chunks or [content[: self._safe_cut(content, limit)]]
 
     @staticmethod
     def _safe_cut(value: str, max_bytes: int) -> int:
@@ -76,11 +79,34 @@ class WeComGroupBotAdapter(MessageChannel):
     async def send_text(self, recipient: str, content: str) -> MessageResult:
         del recipient  # Group bots address the configured group, not a user ID.
         chunks = self.split_message(content)
+        if len(chunks) > 1:
+            # Reserve bytes for the per-chunk heading so the final payload also
+            # stays within the Enterprise WeChat limit.
+            for _ in range(3):
+                heading = self._chunk_heading(1, len(chunks))
+                heading_bytes = len(heading.encode("utf-8"))
+                limited = self.split_message(
+                    content,
+                    max_bytes=self.max_chars - heading_bytes if heading_bytes < self.max_chars else self.max_chars,
+                )
+                if len(limited) == len(chunks):
+                    chunks = limited
+                    break
+                chunks = limited
         last: MessageResult | None = None
         for index, chunk in enumerate(chunks, start=1):
-            body = chunk if len(chunks) == 1 else f"今日新闻早报（{index}/{len(chunks)}）\n\n{chunk}"
+            body = chunk if len(chunks) == 1 else f"{self._chunk_heading(index, len(chunks))}{chunk}"
             last = await self._send_chunk(body)
         return last or MessageResult(provider="wecom_group_bot")
+
+    def _chunk_heading(self, index: int, total: int) -> str:
+        full = f"今日新闻早报（{index}/{total}）\n\n"
+        if len(full.encode("utf-8")) < self.max_chars:
+            return full
+        short = f"{index}/{total}\n"
+        if len(short.encode("utf-8")) < self.max_chars:
+            return short
+        return ""
 
     async def _send_chunk(self, content: str) -> MessageResult:
         for attempt in range(self.max_retries + 1):

@@ -248,6 +248,8 @@ DigestDeliveryService 负责将 DailyDigest 发送到微信 recipient；成功�
 
 `app/runtime.py` 提供 `ApplicationContainer`，统一持有 Redis、DeepSeek 和配置选择的消息通道，并为每次 Agent/日报请求创建独立 SQLAlchemy Session。设置 `MESSAGE_CHANNEL=wecom_group_bot` 和 `WECOM_GROUP_BOT_WEBHOOK` 后使用企业微信群机器人；设置 `ENABLE_SCHEDULER=true` 后，调度器会在 `Asia/Shanghai` 每天 09:00 执行生成并发送日报。
 
+企业微信日报使用紧凑推送格式：数据库和 API 保留完整日报，企业微信只发送适合手机阅读的版本。当天没有新闻的领域会被隐藏；每个显示领域最多展示 3 条新闻，原文链接集中放在末尾，消息按 UTF-8 字节数安全分片。`WECOM_MESSAGE_MAX_CHARS` 默认值为 `3000`。
+
 当前 API：
 
 - `POST /api/agent/chat`：调用 Tool Calling NewsAgent。

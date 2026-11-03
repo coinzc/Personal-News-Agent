@@ -182,7 +182,7 @@ class DailyDigestService:
         end_local = start_local + timedelta(days=1)
         stmt = (
             select(NewsItem)
-            .options(selectinload(NewsItem.events))
+            .options(selectinload(NewsItem.events), selectinload(NewsItem.source))
             .where(
                 NewsItem.published_at >= start_local.astimezone(UTC), NewsItem.published_at < end_local.astimezone(UTC)
             )
@@ -230,6 +230,7 @@ class DailyDigestService:
                         "url": item.url,
                         "published_at": self._format_published_at(item.published_at),
                         "source_id": str(item.source_id),
+                        "source_name": item.source.name if item.source is not None else "未知来源",
                     }
                 )
                 if len(rows) == 3:

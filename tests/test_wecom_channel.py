@@ -25,6 +25,7 @@ async def test_wecom_sends_markdown_and_chunks_utf8() -> None:
     assert result.provider == "wecom_group_bot"
     assert all(item["msgtype"] == "markdown" for item in requests)
     assert len(requests) > 1
+    assert all(len(item["markdown"]["content"].encode("utf-8")) <= 20 for item in requests)
 
 
 @pytest.mark.asyncio

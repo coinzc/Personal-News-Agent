@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime
 
 import pytest
+from app.channels.digest_delivery import DigestDeliveryService
 from app.db.base import Base
 from app.llm.client import LLMInvalidResponseError
 from app.models import DailyDigest, NewsItem, NewsSource, User
@@ -159,3 +160,34 @@ async def test_daily_digest_falls_back_on_invalid_summary_json(tmp_path):
         assert digest.status == "completed"
         assert "Grounded RSS summary." in digest.content
     await engine.dispose()
+
+
+def test_compact_delivery_hides_empty_categories() -> None:
+    digest = DailyDigest(
+        digest_date=date(2026, 9, 10),
+        timezone="Asia/Shanghai",
+        status="completed",
+        sections={
+            "categories": {
+                "AI": [
+                    {
+                        "title": "OpenAI 发布新模型",
+                        "summary": "OpenAI 发布了一款新模型。",
+                        "published_at": "2026-09-10 10:00",
+                        "source_name": "OpenAI",
+                        "url": "https://example.test/a",
+                    }
+                ],
+                "科技": [],
+            },
+            "trend_analysis": "AI 领域持续活跃。",
+        },
+    )
+    content = DigestDeliveryService.compact_content(digest)
+    assert "AI" in content
+    assert "科技" not in content
+    assert "暂无重点新闻" not in content
+    assert "###" not in content
+    assert "为什么重要" not in content
+    assert "2026-09-10 10:00" in content
+    assert "原文链接" in content
