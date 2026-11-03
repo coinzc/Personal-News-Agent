@@ -142,6 +142,9 @@ class ApplicationContainer:
     async def _default_user(self, session: AsyncSession) -> User:
         user = await session.scalar(select(User).where(User.display_name == _DEFAULT_USER_NAME))
         if user is not None:
+            if user.timezone != self.settings.timezone:
+                user.timezone = self.settings.timezone
+                await session.flush()
             return user
         user = User(display_name=_DEFAULT_USER_NAME, timezone=self.settings.timezone)
         session.add(user)

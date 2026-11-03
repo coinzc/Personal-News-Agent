@@ -143,7 +143,7 @@ set_env DATABASE_URL "postgresql+asyncpg://${POSTGRES_USER:-news_agent}:${POSTGR
 set_env REDIS_URL "redis://redis:6379/0"
 set_env APP_ENV production
 set_env DEBUG false
-set_env TIMEZONE Asia/Singapore
+set_env TIMEZONE Asia/Shanghai
 set_env MESSAGE_CHANNEL wecom_group_bot
 set_env ENABLE_SCHEDULER true
 

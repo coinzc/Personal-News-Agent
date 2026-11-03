@@ -34,14 +34,52 @@ async def test_daily_digest_generates_all_sections_and_is_idempotent(tmp_path):
         )
         session.add(item)
         await session.commit()
-        service = DailyDigestService(session, user_id=user.id, timezone="Asia/Singapore")
+        service = DailyDigestService(session, user_id=user.id, timezone="Asia/Shanghai")
         digest = await service.generate_daily_digest(date(2026, 9, 10))
         same = await service.generate_daily_digest(date(2026, 9, 10))
         assert digest.status == "completed"
         assert digest.id == same.id
         assert "## AI" in digest.content
         assert "https://example.test/a" in digest.content
+        assert "时间：2026-09-10 10:00" in digest.content
+        assert "为什么重要" not in digest.content
         assert set(digest.sections["categories"]) == {"AI", "科技", "编程", "财经", "商业", "国际", "科学", "游戏"}
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_daily_digest_uses_chinese_llm_title_and_summary(tmp_path):
+    engine = await make_session(tmp_path)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        user = User(display_name="Chinese digest")
+        source = NewsSource(name="Test", url="https://example.test/chinese", source_type="rss", category="AI")
+        session.add_all([user, source])
+        await session.flush()
+        session.add(
+            NewsItem(
+                source_id=source.id,
+                title="OpenAI announces new model",
+                url="https://example.test/chinese/article",
+                category="AI",
+                language="en",
+                summary="OpenAI announced a new model.",
+                published_at=datetime(2026, 9, 10, 2, 0, tzinfo=UTC),
+            )
+        )
+        await session.commit()
+
+        async def translated_summary(item):
+            return {"title_zh": "OpenAI 发布新模型", "summary_zh": "OpenAI 发布了一款新模型。"}
+
+        service = DailyDigestService(
+            session,
+            user_id=user.id,
+            timezone="Asia/Shanghai",
+            summarize=translated_summary,
+        )
+        digest = await service.generate_daily_digest(date(2026, 9, 10))
+        assert "### OpenAI 发布新模型" in digest.content
+        assert "摘要：OpenAI 发布了一款新模型。" in digest.content
     await engine.dispose()
 
 

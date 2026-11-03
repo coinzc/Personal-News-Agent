@@ -22,7 +22,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     wechat_openid: Mapped[str | None] = mapped_column(String(128), unique=True)
     display_name: Mapped[str | None] = mapped_column(String(255))
-    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Singapore")
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Shanghai")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
     daily_digests: Mapped[list[DailyDigest]] = relationship(back_populates="user")

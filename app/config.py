@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "testing", "staging", "production"] = "development"
     debug: bool = False
     log_level: str = "INFO"
-    timezone: str = "Asia/Singapore"
+    timezone: str = "Asia/Shanghai"
     api_prefix: str = "/api"
     database_url: str = "postgresql+asyncpg://news_agent:change-me@localhost:5432/news_agent"
     redis_url: str = "redis://localhost:6379/0"

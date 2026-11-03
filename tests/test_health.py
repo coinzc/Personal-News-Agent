@@ -16,7 +16,7 @@ def test_health_endpoint_returns_service_metadata() -> None:
         "service": "Test News Agent",
         "version": "0.1.0",
         "environment": "testing",
-        "timezone": "Asia/Singapore",
+        "timezone": "Asia/Shanghai",
     }
 
 

@@ -53,6 +53,8 @@ class NewsSummary(StrictLLMSchema):
     summary: str = Field(min_length=1, max_length=2_000)
     key_points: list[str] = Field(default_factory=list, max_length=8)
     source_url: HttpUrl
+    title_zh: str | None = Field(default=None, max_length=500)
+    summary_zh: str | None = Field(default=None, max_length=2_000)
 
 
 class NewsRanking(StrictLLMSchema):

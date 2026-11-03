@@ -26,7 +26,7 @@ class DailyDigest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     digest_date: Mapped[date] = mapped_column(Date, nullable=False)
-    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Singapore")
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Shanghai")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default="draft")
     content: Mapped[str | None] = mapped_column(Text)
     sections: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")

@@ -209,8 +209,10 @@ class DailyDigestService:
                 if self.summarize is not None:
                     try:
                         result = await self.summarize(item)
-                        summary = str(result.get("summary") or summary)
+                        summary = str(result.get("summary_zh") or result.get("summary") or summary)
+                        title = str(result.get("title_zh") or item.title)
                     except LLMInvalidResponseError as exc:
+                        title = item.title
                         # A malformed response for one article must not discard
                         # the whole digest; use the grounded RSS summary instead.
                         logger.warning(
@@ -218,13 +220,14 @@ class DailyDigestService:
                             item.id,
                             exc,
                         )
+                else:
+                    title = item.title
                 rows.append(
                     {
-                        "title": item.title,
+                        "title": title,
                         "summary": summary,
-                        "why_important": self._why_important(item),
                         "url": item.url,
-                        "published_at": item.published_at.isoformat() if item.published_at else None,
+                        "published_at": self._format_published_at(item.published_at),
                         "source_id": str(item.source_id),
                     }
                 )
@@ -233,12 +236,12 @@ class DailyDigestService:
             sections[category] = rows
         return sections
 
-    @staticmethod
-    def _why_important(item: NewsItem) -> str:
-        score = getattr(item, "importance_score", None)
-        if score is not None:
-            return f"重要性评分 {float(score):.1f}/100，可能影响 {item.category} 领域。"
-        return f"该消息与 {item.category} 领域直接相关，值得持续关注。"
+    def _format_published_at(self, value: datetime | None) -> str:
+        if value is None:
+            return "时间未知"
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
+        return value.astimezone(ZoneInfo(self.timezone)).strftime("%Y-%m-%d %H:%M")
 
     @staticmethod
     def _default_trend(sections: dict[str, list[dict[str, Any]]]) -> str:
@@ -247,9 +250,14 @@ class DailyDigestService:
 
     @staticmethod
     def _format_row(row: dict[str, Any]) -> str:
-        headline = f"- {row['title']}：{row['summary']}（为什么重要：{row['why_important']}）"
-        provenance = f"来源：{row['url']} | 时间：{row['published_at'] or '未知'}"
-        return f"{headline}\n  {provenance}"
+        return "\n".join(
+            [
+                f"### {row['title']}",
+                f"摘要：{row['summary']}",
+                f"时间：{row['published_at']}",
+                f"来源：{row['url']}",
+            ]
+        )
 
     def _compose(self, target_date: date, sections: dict[str, list[dict[str, Any]]], trend: str) -> str:
         lines = ["# 今日新闻早报", f"日期：{target_date.isoformat()}", ""]

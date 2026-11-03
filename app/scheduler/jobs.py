@@ -35,7 +35,7 @@ def build_scheduler(
     *,
     run_collect: Callable[[], Awaitable[Any]] | None = None,
     collection_interval_minutes: int = 30,
-    timezone: str = "Asia/Singapore",
+    timezone: str = "Asia/Shanghai",
 ) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=ZoneInfo(timezone))
     scheduler.add_job(

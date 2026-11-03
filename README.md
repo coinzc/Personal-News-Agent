@@ -1,8 +1,8 @@
 # Personal News Agent
 
-基于 FastAPI、PostgreSQL、Redis 和 DeepSeek 的个人智能新闻 Agent。系统目标是持续采集多领域新闻，完成清洗、去重、事件聚类、分类、排序和摘要，并在 `Asia/Singapore` 时区每天 09:00 生成日报，通过可插拔渠道发送。
+基于 FastAPI、PostgreSQL、Redis 和 DeepSeek 的个人智能新闻 Agent。系统目标是持续采集多领域新闻，完成清洗、去重、事件聚类、分类、排序和摘要，并在 `Asia/Shanghai`（中国北京时间）每天 09:00 生成日报，通过可插拔渠道发送。
 
-当前仓库已完成 **Phase 1-10：核心功能、应用编排与部署基础设施**。FastAPI lifespan 会创建运行时容器，按配置初始化 DeepSeek、Redis、消息渠道和可选 APScheduler；`/api/agent/chat`、`/api/digest/generate` 和 `/api/wechat/webhook` 已接入容器。日报服务在 `Asia/Singapore` 时区按天加载新闻，按八大领域去重并选择 Top 3，保存为 `DailyDigest`，并通过 Redis 锁和数据库唯一约束保证同一天幂等。
+当前仓库已完成 **Phase 1-10：核心功能、应用编排与部署基础设施**。FastAPI lifespan 会创建运行时容器，按配置初始化 DeepSeek、Redis、消息渠道和可选 APScheduler；`/api/agent/chat`、`/api/digest/generate` 和 `/api/wechat/webhook` 已接入容器。日报服务在 `Asia/Shanghai` 时区按天加载新闻，按八大领域去重并选择 Top 3，保存为 `DailyDigest`，并通过 Redis 锁和数据库唯一约束保证同一天幂等。日报标题和摘要优先由 DeepSeek 翻译为简体中文，时间统一显示为 `YYYY-MM-DD HH:MM`。
 
 ## 架构总览
 
@@ -13,7 +13,7 @@ FastAPI/Nginx -> ApplicationContainer -> Agent/Tools -> DeepSeek
                                   |                     |
                                   +-> DailyDigest ------+-> WeChat/WeCom Channel
                                   +-> Redis Lock/Cache
-                                  +-> APScheduler 09:00 Asia/Singapore
+                                  +-> APScheduler 09:00 Asia/Shanghai
 ```
 
 `ApplicationContainer`（`app/runtime.py`）是运行时组合根，负责创建 PostgreSQL Session、Redis、DeepSeek Client、消息渠道和业务服务。Agent 只通过 `ToolRegistry` 访问新闻能力，不直接操作 ORM；日报服务通过注入的步骤和 `MessageChannel` 工作；所有外部客户端都可以在测试中替换为 Fake/Mock。
@@ -26,7 +26,7 @@ FastAPI/Nginx -> ApplicationContainer -> Agent/Tools -> DeepSeek
 - PostgreSQL：新闻、事件、日报、任务和 Agent 会话持久化。
 - Redis：日报分布式锁、缓存和后续任务队列能力。
 - DeepSeek：分类、摘要、排序辅助和 Tool Calling。
-- APScheduler：显式 `Asia/Singapore` 时区的每日 09:00 任务。
+- APScheduler：显式 `Asia/Shanghai` 时区的每日 09:00 任务。
 - Nginx：外部反向代理。
 - WeChatAdapter：个人微信网关出站/入站协议。
 - WeComGroupBotAdapter：企业微信群机器人出站消息。
@@ -235,7 +235,7 @@ pytest --cov=app
 
 服务通过注入式 collector、去重/聚类/排序/摘要/趋势步骤连接现有模块，失败会写入 `Task` 和 `DailyDigest.error_message`，不会让调度器崩溃。Redis 分布式锁 `news-agent:digest:<user>:<date>` 防止多实例重复运行，`daily_digests(user_id, digest_date)` 唯一约束提供最终幂等保护；无 Redis 的测试环境使用安全的进程内锁替身。
 
-`app/scheduler/jobs.py` 提供 APScheduler 入口，使用显式 `Asia/Singapore` 时区在每天 09:00 触发日报任务，`max_instances=1`、`coalesce=True` 并隔离任务异常。Phase 7 测试覆盖正常生成、重复执行、新闻为空和 DeepSeek 摘要失败路径。
+`app/scheduler/jobs.py` 提供 APScheduler 入口，使用显式 `Asia/Shanghai` 时区在每天 09:00 触发日报任务，`max_instances=1`、`coalesce=True` 并隔离任务异常。日报通过 DeepSeek 生成中文标题和摘要，单条摘要结构化校验失败时回退到 RSS 原文摘要。Phase 7 测试覆盖正常生成、重复执行、新闻为空和 DeepSeek 摘要失败路径。
 
 
 ## Phase 8 微信适配器与日报推送
@@ -246,7 +246,7 @@ DigestDeliveryService 负责将 DailyDigest 发送到微信 recipient；成功�
 
 ## 应用编排与 API 接线
 
-`app/runtime.py` 提供 `ApplicationContainer`，统一持有 Redis、DeepSeek 和配置选择的消息通道，并为每次 Agent/日报请求创建独立 SQLAlchemy Session。设置 `MESSAGE_CHANNEL=wecom_group_bot` 和 `WECOM_GROUP_BOT_WEBHOOK` 后使用企业微信群机器人；设置 `ENABLE_SCHEDULER=true` 后，调度器会在 `Asia/Singapore` 每天 09:00 执行生成并发送日报。
+`app/runtime.py` 提供 `ApplicationContainer`，统一持有 Redis、DeepSeek 和配置选择的消息通道，并为每次 Agent/日报请求创建独立 SQLAlchemy Session。设置 `MESSAGE_CHANNEL=wecom_group_bot` 和 `WECOM_GROUP_BOT_WEBHOOK` 后使用企业微信群机器人；设置 `ENABLE_SCHEDULER=true` 后，调度器会在 `Asia/Shanghai` 每天 09:00 执行生成并发送日报。
 
 当前 API：
 
