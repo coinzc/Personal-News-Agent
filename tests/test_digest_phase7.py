@@ -206,6 +206,24 @@ def test_compact_delivery_all_empty_shows_only_overall_notice() -> None:
     assert "游戏" not in content
 
 
+def test_compact_delivery_rebuilds_legacy_trend_without_hidden_game() -> None:
+    digest = DailyDigest(
+        digest_date=date(2026, 9, 10),
+        timezone="Asia/Shanghai",
+        status="completed",
+        sections={
+            "categories": {
+                "AI": [{"title": "模型发布", "summary": "摘要", "url": "https://example.test/a"}],
+                "游戏": [],
+            },
+            "trend_analysis": "今日覆盖领域：AI、游戏。",
+        },
+    )
+    content = DigestDeliveryService.compact_content(digest)
+    assert "今日覆盖领域：AI。" in content
+    assert "游戏" not in content
+
+
 def test_compact_delivery_uses_category_emojis_and_omits_headline_and_game() -> None:
     digest = DailyDigest(
         digest_date=date(2026, 9, 10),

@@ -31,8 +31,12 @@ def _clean_display_text(value: object, *, fallback: str) -> str:
     """Remove provider-added interaction metadata from user-facing text."""
 
     text = str(value or fallback).strip()
+    text = re.sub(r"https?://\S+", "", text, flags=re.IGNORECASE)
     text = re.sub(r"(?:点赞数|点赞|likes?)\s*[:：]?\s*\d+", "", text, flags=re.IGNORECASE)
     text = re.sub(r"(?:评论数|评论|comments?)\s*[:：]?\s*\d+", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?:点数|得分|获得|得到)\s*[:：]?\s*\d+\s*分?", "", text)
+    text = re.sub(r"(?:共有|共)\s*\d+\s*条?评论", "", text)
+    text = re.sub(r"评论链接?", "", text)
     text = re.sub(r"\s*[|｜]\s*", " ", text)
     text = re.sub(r"\s{2,}", " ", text)
     return re.sub(r"^[\s|｜,，;；-]+|[\s|｜,，;；-]+$", "", text) or fallback
@@ -75,7 +79,11 @@ class DigestDeliveryService:
                     links.append(row)
         if not all_rows:
             lines.extend(["", separator, "暂无可用新闻", separator])
-        trend = _clean_display_text(payload.get("trend_analysis"), fallback="暂无趋势分析")
+        raw_trend = str(payload.get("trend_analysis") or "")
+        if raw_trend.startswith("今日覆盖领域："):
+            trend = "今日覆盖领域：" + ("、".join(category for category, _ in active) or "暂无新闻数据") + "。"
+        else:
+            trend = _clean_display_text(raw_trend, fallback="暂无趋势分析")
         lines.extend(["", separator, "今日趋势", separator, trend])
         lines.extend(["", separator, "今日最值得关注的 3 件事", separator])
         top_titles = [

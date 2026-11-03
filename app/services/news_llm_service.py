@@ -63,11 +63,14 @@ class NewsSummarizer:
             {"role": "user", "content": _article_context(item)},
         ]
         result = await self.client.complete_structured(messages, NewsSummary)
-        if self._needs_chinese_translation(item, result):
+        for _ in range(2):
+            if not self._needs_chinese_translation(item, result):
+                break
             try:
                 translated = await self.translate(item, result)
-                result.title_zh = translated.title_zh or result.title_zh
-                result.summary_zh = translated.summary_zh or result.summary_zh
+                if self._has_chinese(translated.title_zh) and self._has_chinese(translated.summary_zh):
+                    result.title_zh = translated.title_zh
+                    result.summary_zh = translated.summary_zh
             except Exception:
                 # Keep the validated, source-grounded first response if a
                 # follow-up translation request is unavailable.
@@ -103,6 +106,10 @@ class NewsSummarizer:
         if not title or not summary:
             return True
         return not re.search(r"[\u3400-\u9fff]", title) or not re.search(r"[\u3400-\u9fff]", summary)
+
+    @staticmethod
+    def _has_chinese(value: str | None) -> bool:
+        return bool(value and re.search(r"[\u3400-\u9fff]", value))
 
 
 class NewsRanker:
