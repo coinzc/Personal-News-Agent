@@ -29,6 +29,24 @@ def test_management_route_accepts_api_key() -> None:
     assert response.status_code == 503
 
 
+def test_digest_send_route_retries_saved_digest() -> None:
+    app = create_app(Settings(database_url="sqlite+aiosqlite:///./test.db", admin_api_key="admin-secret"))
+
+    class FakeContainer:
+        delivery_available = True
+        settings = SimpleNamespace(timezone="Asia/Shanghai")
+
+        async def send_daily_digest(self, digest_date):
+            assert digest_date is None
+            return True
+
+    with TestClient(app) as client:
+        app.state.container = FakeContainer()
+        response = client.post("/api/digest/send", headers={"X-API-Key": "admin-secret"})
+    assert response.status_code == 200
+    assert response.json()["sent"] is True
+
+
 def test_digest_route_returns_503_when_container_is_missing() -> None:
     app = create_app(Settings(database_url="sqlite+aiosqlite:///./test.db"))
     with TestClient(app) as client:

@@ -6,7 +6,7 @@ import logging
 import re
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,13 @@ from app.channels.base import MessageChannel
 from app.models.digest import DailyDigest
 
 logger = logging.getLogger(__name__)
+_DELIVERY_LOCK_TIMEOUT_SECONDS = 600
+
+
+class _DeliveryLock(Protocol):
+    async def __aenter__(self) -> Any: ...
+
+    async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None: ...
 
 _CATEGORY_ORDER = ("AI", "科技", "编程", "财经", "商业", "国际", "科学")
 _CATEGORY_EMOJIS = {
@@ -43,9 +50,10 @@ def _clean_display_text(value: object, *, fallback: str) -> str:
 
 
 class DigestDeliveryService:
-    def __init__(self, session: AsyncSession, channel: MessageChannel) -> None:
+    def __init__(self, session: AsyncSession, channel: MessageChannel, *, redis: Any | None = None) -> None:
         self.session = session
         self.channel = channel
+        self.redis = redis
 
     @staticmethod
     def compact_content(digest: DailyDigest) -> str:
@@ -116,22 +124,71 @@ class DigestDeliveryService:
         return lines
 
     async def send_daily_digest(self, digest: DailyDigest, recipient: str) -> bool:
-        if digest.status not in {"completed", "sent"} or not digest.content:
+        if not digest.content:
             return False
+        lock: _DeliveryLock
+        if self.redis is not None:
+            lock = _DigestDeliveryLock(self.redis, str(digest.id))
+        else:
+            lock = _NoopDeliveryLock()
         try:
-            await self.channel.send_text(recipient, self.compact_content(digest))
-            digest.status = "sent"
-            digest.sent_at = datetime.now(UTC)
-            digest.error_message = None
-            await self.session.commit()
-            logger.info("Daily digest sent digest_id=%s recipient=%s", digest.id, recipient)
-            return True
+            async with lock:
+                await self.session.refresh(digest)
+                if digest.status != "completed" and digest.status != "send_failed":
+                    return False
+                await self.channel.send_text(recipient, self.compact_content(digest))
+                digest.status = "sent"
+                digest.sent_at = datetime.now(UTC)
+                digest.error_message = None
+                await self.session.commit()
+                logger.info("Daily digest sent digest_id=%s", digest.id)
+                return True
+        except DigestDeliveryInProgress:
+            logger.info("Daily digest delivery already in progress digest_id=%s", digest.id)
+            return False
         except Exception as exc:
             digest.status = "send_failed"
-            digest.error_message = str(exc)[:2_000]
+            digest.error_message = self._safe_error(exc)
             await self.session.commit()
             logger.exception("Daily digest delivery failed digest_id=%s", digest.id)
             return False
+
+    @staticmethod
+    def _safe_error(exc: Exception) -> str:
+        return f"{type(exc).__name__}: {str(exc)}"[:2_000]
+
+
+class _DigestDeliveryLock:
+    def __init__(self, redis: Any, digest_id: str) -> None:
+        self._lock = redis.lock(
+            f"news-agent:digest-delivery:{digest_id}",
+            timeout=_DELIVERY_LOCK_TIMEOUT_SECONDS,
+            blocking=False,
+        )
+
+    async def __aenter__(self) -> _DigestDeliveryLock:
+        acquired = await self._lock.acquire(blocking=False)
+        if not acquired:
+            raise DigestDeliveryInProgress
+        return self
+
+    async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        try:
+            await self._lock.release()
+        except Exception:
+            logger.exception("Failed to release daily digest delivery lock")
+
+
+class _NoopDeliveryLock:
+    async def __aenter__(self) -> _NoopDeliveryLock:
+        return self
+
+    async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        return None
+
+
+class DigestDeliveryInProgress(RuntimeError):
+    """Another process currently owns the delivery lock for this digest."""
 
 
 __all__ = ["DigestDeliveryService"]

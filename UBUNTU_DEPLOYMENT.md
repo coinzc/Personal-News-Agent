@@ -109,6 +109,12 @@ Management endpoints require the `X-API-Key` header using `ADMIN_API_KEY`:
 curl -H "X-API-Key: $ADMIN_API_KEY" -X POST http://127.0.0.1/api/digest/generate
 ```
 
+To retry delivery of an already generated or `send_failed` digest, call:
+
+```bash
+curl -H "X-API-Key: $ADMIN_API_KEY" -X POST 'http://127.0.0.1/api/digest/send?digest_date=2026-09-28'
+```
+
 The Agent chat endpoint uses the same header. In production and staging, the app refuses to start without `ADMIN_API_KEY`. The inbound `/api/wechat/webhook` endpoint uses its separate `WECHAT_WEBHOOK_TOKEN`; it returns `503` and stays disabled when that token is unset.
 
 Inbound gateway request:

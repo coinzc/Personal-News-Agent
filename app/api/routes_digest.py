@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -18,3 +19,17 @@ async def generate_digest(
         raise HTTPException(status_code=503, detail="Digest service is not configured")
     digest = await container.generate_daily_digest(digest_date)
     return {"id": str(digest.id), "date": digest.digest_date.isoformat(), "status": digest.status}
+
+
+@router.post("/send")
+async def send_digest(
+    request: Request,
+    digest_date: date | None = None,
+    _: None = Depends(require_admin_api_key),
+) -> dict[str, object]:
+    container = getattr(request.app.state, "container", None)
+    if container is None or not container.delivery_available:
+        raise HTTPException(status_code=503, detail="Digest delivery is not configured")
+    sent = await container.send_daily_digest(digest_date)
+    target_date = digest_date or datetime.now(ZoneInfo(container.settings.timezone)).date()
+    return {"date": target_date.isoformat(), "sent": sent}

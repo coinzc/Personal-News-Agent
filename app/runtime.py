@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import date
+from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from redis.asyncio import Redis, from_url
 from sqlalchemy import select
@@ -16,7 +17,7 @@ from app.channels import MessageChannel, WeChatAdapter, WeComGroupBotAdapter
 from app.config import Settings
 from app.db.session import get_session_factory
 from app.llm import DeepSeekClient, LLMClient
-from app.models import User
+from app.models import DailyDigest, User
 from app.services import (
     DailyDigestService,
     NewsCollectionService,
@@ -131,22 +132,37 @@ class ApplicationContainer:
 
     async def generate_and_send_daily_digest(self, digest_date: date | None = None) -> Any:
         digest = await self.generate_daily_digest(digest_date)
-        channel_ready = (
+        await self.send_daily_digest(digest.digest_date)
+        return digest
+
+    @property
+    def delivery_available(self) -> bool:
+        return (
             self.settings.wecom_group_bot_webhook is not None
             if self.settings.message_channel == "wecom_group_bot"
             else self.settings.wechat_recipient is not None and self.settings.wechat_gateway_endpoint is not None
         )
-        if channel_ready:
-            from app.channels.digest_delivery import DigestDeliveryService
 
-            async with self.session_factory() as session:
-                persisted = await session.get(type(digest), digest.id)
-                if persisted is not None:
-                    await DigestDeliveryService(session, self.wechat).send_daily_digest(
-                        persisted,
-                        self.settings.wechat_recipient or "default",
-                    )
-        return digest
+    async def send_daily_digest(self, digest_date: date | None = None) -> bool:
+        if not self.delivery_available:
+            raise RuntimeError("digest delivery channel is not configured")
+        target_date = digest_date or datetime.now(ZoneInfo(self.settings.timezone)).date()
+        from app.channels.digest_delivery import DigestDeliveryService
+
+        async with self.session_factory() as session:
+            user = await self._default_user(session)
+            digest = await session.scalar(
+                select(DailyDigest).where(
+                    DailyDigest.user_id == user.id,
+                    DailyDigest.digest_date == target_date,
+                )
+            )
+            if digest is None:
+                return False
+            return await DigestDeliveryService(session, self.wechat, redis=self.redis).send_daily_digest(
+                digest,
+                self.settings.wechat_recipient or "default",
+            )
 
     async def _default_user(self, session: AsyncSession) -> User:
         user = await session.scalar(select(User).where(User.display_name == _DEFAULT_USER_NAME))
