@@ -197,4 +197,6 @@ Do not run `docker compose down -v` unless you intend to delete database and Red
 
 ## Current Scope
 
-The app exposes `/health`, `/api/agent/chat`, `/api/digest/generate` and `/api/wechat/webhook`. With `ENABLE_SCHEDULER=true`, it runs daily digest generation and delivery at 09:00 Asia/Singapore. Production collection jobs still need scheduler registration.
+The API exposes news search/details (`GET /api/news`, `GET /api/news/{id}`), event search (`GET /api/events`), today's digest (`GET /api/digest/today`), and news source listing (`GET /api/sources`). Source create/update/delete require `X-API-Key`; source responses omit collector configuration to avoid returning stored credentials. Agent and digest management operations also require `X-API-Key`.
+
+With `ENABLE_SCHEDULER=true`, the app runs collection jobs and daily digest generation and delivery at 09:00 Asia/Shanghai.

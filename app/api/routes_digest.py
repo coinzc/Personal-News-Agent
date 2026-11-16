@@ -4,8 +4,22 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.api.auth import require_admin_api_key
+from app.services.news_query_service import SQLAlchemyNewsToolService
 
 router = APIRouter(prefix="/api/digest", tags=["digest"])
+
+
+@router.get("/today")
+async def get_today_digest(request: Request) -> dict[str, object]:
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise HTTPException(status_code=503, detail="Digest service is not configured")
+    target_date = datetime.now(ZoneInfo(container.settings.timezone)).date()
+    async with container.session_factory() as session:
+        digest = await SQLAlchemyNewsToolService(session).get_daily_digest(target_date)
+    if digest is None:
+        raise HTTPException(status_code=404, detail="Today's digest not found")
+    return digest
 
 
 @router.post("/generate")

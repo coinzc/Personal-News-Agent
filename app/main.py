@@ -8,7 +8,10 @@ from fastapi import FastAPI
 from app import __version__
 from app.api.routes_agent import router as agent_router
 from app.api.routes_digest import router as digest_router
+from app.api.routes_events import router as events_router
 from app.api.routes_health import router as health_router
+from app.api.routes_news import router as news_router
+from app.api.routes_sources import router as sources_router
 from app.api.routes_wechat import router as wechat_router
 from app.config import Settings, get_settings
 from app.db.session import dispose_engine
@@ -63,6 +66,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(agent_router)
     app.include_router(digest_router)
+    app.include_router(news_router)
+    app.include_router(events_router)
+    app.include_router(sources_router)
     app.include_router(wechat_router)
     return app
 
