@@ -30,9 +30,18 @@ class NewsCollectionService:
             result = await self._collect_enabled_sources()
             saved_task = await self.session.get(Task, task_record.id)
             if saved_task is not None:
-                saved_task.status = "completed"
+                failed_sources = int(result.get("failed_sources", 0))
+                total_sources = int(result.get("sources", 0))
+                if failed_sources == 0:
+                    saved_task.status = "completed"
+                elif failed_sources == total_sources:
+                    saved_task.status = "failed"
+                else:
+                    saved_task.status = "partial_failed"
                 saved_task.finished_at = datetime.now(UTC)
                 saved_task.result = result
+                if failed_sources:
+                    saved_task.error_message = self._failure_summary(result)
                 await self.session.commit()
             return result
         except Exception as exc:
@@ -57,11 +66,14 @@ class NewsCollectionService:
         )
         results = await self.collector.collect_many(sources)
         inserted = skipped = failed = 0
+        failures: list[dict[str, str]] = []
         for source in sources:
             result = results[str(source.id)]
             if isinstance(result, Exception):
                 failed += 1
-                logger.warning("RSS source failed source_id=%s url=%s error=%s", source.id, source.url, result)
+                failure = {"source_id": str(source.id), "error_type": type(result).__name__}
+                failures.append(failure)
+                logger.warning("RSS source failed source_id=%s error_type=%s", source.id, type(result).__name__)
                 continue
             added, ignored = await NewsIngestionService(self.session).ingest(source, result)
             inserted += added
@@ -72,10 +84,19 @@ class NewsCollectionService:
         return {
             "sources": len(sources),
             "failed_sources": failed,
+            "successful_sources": len(sources) - failed,
+            "failures": failures,
             "inserted": inserted,
             "skipped": skipped,
             "events": len(clustered),
         }
+
+    @staticmethod
+    def _failure_summary(result: dict[str, Any]) -> str:
+        failures = result.get("failures", [])
+        types = sorted({str(row.get("error_type", "UnknownError")) for row in failures if isinstance(row, dict)})
+        count = int(result.get("failed_sources", len(failures)))
+        return f"{count} RSS source(s) failed: {', '.join(types) or 'UnknownError'}"[:2_000]
 
 
 __all__ = ["NewsCollectionService"]
