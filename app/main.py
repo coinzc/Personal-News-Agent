@@ -11,6 +11,7 @@ from app.api.routes_digest import router as digest_router
 from app.api.routes_health import router as health_router
 from app.api.routes_wechat import router as wechat_router
 from app.config import Settings, get_settings
+from app.db.session import dispose_engine
 from app.logging_config import configure_logging, logger
 from app.runtime import ApplicationContainer
 from app.scheduler import build_scheduler
@@ -43,10 +44,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
-            if scheduler is not None:
-                scheduler.shutdown(wait=False)
-            await container.aclose()
-            logger.info("Stopping {}", app_settings.app_name)
+            try:
+                if scheduler is not None:
+                    scheduler.shutdown(wait=False)
+            finally:
+                try:
+                    await container.aclose()
+                finally:
+                    await dispose_engine()
+                    logger.info("Stopping {}", app_settings.app_name)
 
     app = FastAPI(
         title=app_settings.app_name,

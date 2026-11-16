@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+from app import main
 from app.config import Settings
 from app.main import create_app
 from fastapi.testclient import TestClient
@@ -105,3 +107,41 @@ def test_production_requires_management_api_key() -> None:
         assert "ADMIN_API_KEY" in str(exc)
     else:
         raise AssertionError("production app without ADMIN_API_KEY must fail")
+
+
+def test_app_lifespan_disposes_database_engine_after_container_close(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeContainer:
+        async def aclose(self) -> None:
+            calls.append("container")
+
+    async def dispose() -> None:
+        calls.append("database")
+
+    monkeypatch.setattr(main.ApplicationContainer, "from_settings", lambda settings: FakeContainer())
+    monkeypatch.setattr(main, "dispose_engine", dispose)
+    with TestClient(create_app(Settings(app_env="testing"))):
+        pass
+
+    assert calls == ["container", "database"]
+
+
+def test_app_lifespan_disposes_database_engine_if_container_close_fails(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeContainer:
+        async def aclose(self) -> None:
+            calls.append("container")
+            raise RuntimeError("container close failed")
+
+    async def dispose() -> None:
+        calls.append("database")
+
+    monkeypatch.setattr(main.ApplicationContainer, "from_settings", lambda settings: FakeContainer())
+    monkeypatch.setattr(main, "dispose_engine", dispose)
+    with pytest.raises(RuntimeError, match="container close failed"):
+        with TestClient(create_app(Settings(app_env="testing"))):
+            pass
+
+    assert calls == ["container", "database"]
