@@ -197,7 +197,7 @@ class DailyDigestService:
         sections: dict[str, list[dict[str, Any]]] = {}
         for category in self.categories:
             candidates = [item for item in current if item.category.casefold() == category.casefold()]
-            candidates.sort(key=lambda item: getattr(item, "importance_score", 0.0) or 0.0, reverse=True)
+            candidates.sort(key=self._event_importance_score, reverse=True)
             rows: list[dict[str, Any]] = []
             seen_events: set[UUID] = set()
             for item in candidates:
@@ -237,6 +237,10 @@ class DailyDigestService:
                     break
             sections[category] = rows
         return sections
+
+    @staticmethod
+    def _event_importance_score(item: NewsItem) -> float:
+        return max((event.importance_score or 0.0 for event in item.events), default=0.0)
 
     def _format_published_at(self, value: datetime | None) -> str:
         if value is None:

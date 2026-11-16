@@ -20,6 +20,7 @@ from app.models import User
 from app.services import (
     DailyDigestService,
     NewsCollectionService,
+    NewsEventRankingService,
     NewsRanker,
     NewsSummarizer,
     SQLAlchemyNewsToolService,
@@ -99,19 +100,27 @@ class ApplicationContainer:
         async with self.session_factory() as session:
             user = await self._default_user(session)
             summary_step: Callable[[Any], Awaitable[dict[str, Any]]] | None = None
+            rank_step: Callable[[Any], Awaitable[Any]] | None = None
             if self.llm is not None:
                 summarizer = NewsSummarizer(self.llm)
+                ranking_service = NewsEventRankingService(NewsRanker(self.llm))
 
                 async def summarize(item: Any) -> dict[str, Any]:
                     summary = await summarizer.summarize(item)
                     return summary.model_dump(mode="json")
 
                 summary_step = summarize
+
+                async def rank(items: Any) -> Any:
+                    return await ranking_service.rank_unscored_events(items)
+
+                rank_step = rank
             service = DailyDigestService(
                 session,
                 redis=self.redis,
                 user_id=user.id,
                 timezone=self.settings.timezone,
+                rank=rank_step,
                 summarize=summary_step,
             )
             return await service.generate_daily_digest(digest_date)

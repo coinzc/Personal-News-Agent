@@ -17,6 +17,7 @@ from app.services.news_dedup_service import (
     NullEmbeddingProvider,
     TitleMatch,
 )
+from app.services.news_event_ranking_service import NewsEventRankingService
 from app.services.news_llm_service import NewsClassifier, NewsRanker, NewsSummarizer
 from app.services.news_query_service import SQLAlchemyNewsToolService
 
@@ -31,6 +32,7 @@ __all__ = [
     "MockEmbeddingProvider",
     "NewsClusteringService",
     "NewsCollectionService",
+    "NewsEventRankingService",
     "NewsClassifier",
     "NewsDedupService",
     "NewsRanker",
