@@ -1,12 +1,17 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.api.auth import require_admin_api_key
 from app.schemas.agent import AgentChatRequest, AgentChatResponse
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 
 @router.post("/chat", response_model=AgentChatResponse)
-async def chat(payload: AgentChatRequest, request: Request) -> AgentChatResponse:
+async def chat(
+    payload: AgentChatRequest,
+    request: Request,
+    _: None = Depends(require_admin_api_key),
+) -> AgentChatResponse:
     container = getattr(request.app.state, "container", None)
     if container is None or not container.agent_available:
         raise HTTPException(status_code=503, detail="Agent service is not configured")

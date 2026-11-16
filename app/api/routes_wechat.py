@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.api.auth import require_wechat_webhook_token
 from app.schemas.wechat import WeChatInboundMessage, WeChatInboundResponse
 
 router = APIRouter(prefix="/api/wechat", tags=["wechat"])
@@ -9,12 +10,8 @@ router = APIRouter(prefix="/api/wechat", tags=["wechat"])
 async def webhook(
     payload: WeChatInboundMessage,
     request: Request,
-    x_wechat_webhook_token: str | None = Header(default=None),
+    _: None = Depends(require_wechat_webhook_token),
 ) -> WeChatInboundResponse:
-    settings = request.app.state.settings
-    expected = settings.wechat_webhook_token
-    if expected and x_wechat_webhook_token != expected.get_secret_value():
-        raise HTTPException(status_code=401, detail="Invalid webhook token")
     container = getattr(request.app.state, "container", None)
     if container is None or not container.agent_available:
         raise HTTPException(status_code=503, detail="Agent service is not configured")

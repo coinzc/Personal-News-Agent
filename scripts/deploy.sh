@@ -150,6 +150,7 @@ set_env WECOM_MESSAGE_MAX_CHARS 3000
 
 prompt_secret DEEPSEEK_API_KEY "Enter DeepSeek API key (hidden)"
 prompt_secret WECOM_GROUP_BOT_WEBHOOK "Enter Enterprise WeChat group bot webhook (hidden)"
+prompt_secret ADMIN_API_KEY "Enter management API key (hidden)"
 
 log "Validating Compose configuration"
 docker compose config >/dev/null

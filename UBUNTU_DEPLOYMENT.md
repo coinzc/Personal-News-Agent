@@ -66,6 +66,7 @@ WECOM_MESSAGE_MAX_CHARS=3500
 WECOM_TIMEOUT=15
 WECOM_MAX_RETRIES=3
 WECOM_BACKOFF_FACTOR=0.5
+ADMIN_API_KEY=replace-with-a-long-random-management-key
 # Legacy personal-WeChat gateway settings; leave empty when using WeCom
 WECHAT_GATEWAY_ENDPOINT=
 WECHAT_GATEWAY_TOKEN=outbound-random-token
@@ -101,6 +102,14 @@ docker compose logs -f --tail=200 backend
 The recommended deployment uses an Enterprise WeChat group bot. Create a dedicated group, add the receiving personal WeChat account, add a group bot, and copy its webhook into `WECOM_GROUP_BOT_WEBHOOK`. The project does not control a personal WeChat client directly and never needs a personal WeChat password or QR login.
 
 Test delivery with the manual digest endpoint before enabling the scheduler. Keep `.env` readable only by the service account and never commit the webhook URL.
+
+Management endpoints require the `X-API-Key` header using `ADMIN_API_KEY`:
+
+```bash
+curl -H "X-API-Key: $ADMIN_API_KEY" -X POST http://127.0.0.1/api/digest/generate
+```
+
+The Agent chat endpoint uses the same header. In production and staging, the app refuses to start without `ADMIN_API_KEY`. The inbound `/api/wechat/webhook` endpoint uses its separate `WECHAT_WEBHOOK_TOKEN`; it returns `503` and stays disabled when that token is unset.
 
 Inbound gateway request:
 

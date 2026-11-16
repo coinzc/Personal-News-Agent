@@ -12,6 +12,23 @@ def test_agent_route_returns_503_when_not_configured() -> None:
     assert response.status_code == 503
 
 
+def test_management_routes_require_api_key_when_configured() -> None:
+    app = create_app(Settings(database_url="sqlite+aiosqlite:///./test.db", admin_api_key="admin-secret"))
+    with TestClient(app) as client:
+        missing = client.post("/api/digest/generate")
+        invalid = client.post("/api/digest/generate", headers={"X-API-Key": "wrong"})
+    assert missing.status_code == 401
+    assert invalid.status_code == 401
+
+
+def test_management_route_accepts_api_key() -> None:
+    app = create_app(Settings(database_url="sqlite+aiosqlite:///./test.db", admin_api_key="admin-secret"))
+    with TestClient(app) as client:
+        del app.state.container
+        response = client.post("/api/digest/generate", headers={"X-API-Key": "admin-secret"})
+    assert response.status_code == 503
+
+
 def test_digest_route_returns_503_when_container_is_missing() -> None:
     app = create_app(Settings(database_url="sqlite+aiosqlite:///./test.db"))
     with TestClient(app) as client:
@@ -40,3 +57,33 @@ def test_wechat_webhook_routes_message_to_agent() -> None:
         )
     assert response.status_code == 200
     assert response.json()["content"] == "今日新闻"
+
+
+def test_wechat_webhook_is_closed_without_token_configuration() -> None:
+    app = create_app(Settings(database_url="sqlite+aiosqlite:///./test.db"))
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/wechat/webhook",
+            json={"sender_id": "wx-1", "content": "今天有什么新闻？"},
+        )
+    assert response.status_code == 503
+
+
+def test_wechat_webhook_rejects_incorrect_token() -> None:
+    app = create_app(Settings(database_url="sqlite+aiosqlite:///./test.db", wechat_webhook_token="hook-secret"))
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/wechat/webhook",
+            headers={"X-WeChat-Webhook-Token": "wrong"},
+            json={"sender_id": "wx-1", "content": "今天有什么新闻？"},
+        )
+    assert response.status_code == 401
+
+
+def test_production_requires_management_api_key() -> None:
+    try:
+        create_app(Settings(app_env="production", database_url="sqlite+aiosqlite:///./test.db"))
+    except ValueError as exc:
+        assert "ADMIN_API_KEY" in str(exc)
+    else:
+        raise AssertionError("production app without ADMIN_API_KEY must fail")

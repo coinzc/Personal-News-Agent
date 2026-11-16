@@ -20,6 +20,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """Create a configured FastAPI app, suitable for production and tests."""
 
     app_settings = settings or get_settings()
+    if app_settings.app_env in {"production", "staging"} and app_settings.admin_api_key is None:
+        raise ValueError("ADMIN_API_KEY must be configured in production and staging")
     configure_logging(app_settings)
 
     @asynccontextmanager
