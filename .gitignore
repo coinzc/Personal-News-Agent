@@ -27,3 +27,6 @@ Thumbs.db
 # Runtime artifacts
 logs/
 *.log
+
+# Local agent workspace data
+.workbuddy/

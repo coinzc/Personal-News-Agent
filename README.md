@@ -218,3 +218,7 @@ mypy app
 - `/health` 是存活检查，不等同于 PostgreSQL、Redis 和 DeepSeek 的完整 readiness 检查。
 - 管理接口鉴权、URL 白名单和更细粒度限流仍属于后续增强项。
 
+## License
+
+[MIT](LICENSE)
+

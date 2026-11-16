@@ -48,7 +48,11 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path: Path) -> None:
     command.upgrade(config, "head")
     engine = create_engine(f"sqlite:///{database_path}")
     try:
-        table_names = set(inspect(engine).get_table_names())
+        database_inspector = inspect(engine)
+        table_names = set(database_inspector.get_table_names())
+        news_item_constraints = database_inspector.get_unique_constraints("news_items")
+        event_news_foreign_keys = database_inspector.get_foreign_keys("event_news")
+        news_item_indexes = database_inspector.get_indexes("news_items")
     finally:
         engine.dispose()
 
@@ -65,6 +69,15 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path: Path) -> None:
         "agent_messages",
         "tasks",
     } <= table_names
+    assert any(constraint["column_names"] == ["url"] for constraint in news_item_constraints)
+    assert {foreign_key["referred_table"] for foreign_key in event_news_foreign_keys} == {
+        "news_events",
+        "news_items",
+    }
+    assert {index["name"] for index in news_item_indexes} >= {
+        "ix_news_items_source_published_at",
+        "ix_news_items_category_published_at",
+    }
 
     command.downgrade(config, "base")
     engine = create_engine(f"sqlite:///{database_path}")
@@ -72,6 +85,18 @@ def test_alembic_upgrade_and_downgrade_on_sqlite(tmp_path: Path) -> None:
         assert inspect(engine).get_table_names() == ["alembic_version"]
     finally:
         engine.dispose()
+
+
+def test_initial_migration_does_not_delegate_schema_to_orm_metadata() -> None:
+    """Migration history must describe DDL directly instead of following current models."""
+
+    migration_path = Path(__file__).parents[1] / "db" / "migrations" / "versions" / "20260909_0001_initial_schema.py"
+    migration_source = migration_path.read_text(encoding="utf-8")
+
+    assert "Base.metadata.create_all" not in migration_source
+    assert "Base.metadata.drop_all" not in migration_source
+    assert "op.create_table(" in migration_source
+    assert "op.drop_table(" in migration_source
 
 
 @pytest.mark.asyncio
