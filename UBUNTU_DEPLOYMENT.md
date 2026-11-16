@@ -88,8 +88,10 @@ cd /opt/personal-news-agent
 docker compose up -d --build
 docker compose ps
 docker compose exec backend python -m app.db.init_db
-curl -f http://127.0.0.1/health
+curl -f http://127.0.0.1/ready
 ```
+
+`/health` is the public liveness check. `/ready` returns HTTP 200 only when both PostgreSQL and Redis are reachable, and is used by the backend container healthcheck.
 
 Logs:
 

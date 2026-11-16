@@ -12,3 +12,15 @@ class HealthResponse(BaseModel):
     version: str
     environment: str
     timezone: str
+
+
+class ReadinessResponse(BaseModel):
+    """Dependency readiness information for orchestration and operators."""
+
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    service: str
+    version: str
+    environment: str
+    timezone: str
+    checks: dict[str, str]
