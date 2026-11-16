@@ -111,3 +111,37 @@ async def test_cluster_pending_only_processes_unlinked_articles(tmp_path) -> Non
         assert await session.scalar(select(func.count()).select_from(EventNews)) == 2
 
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_clustering_does_not_compare_events_across_categories(tmp_path) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'category-clustering.db'}")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        source_finance = NewsSource(
+            name="Finance source",
+            url="https://feeds.example.test/finance.xml",
+            source_type="rss",
+            category="财经",
+        )
+        source_ai = NewsSource(
+            name="AI source",
+            url="https://feeds.example.test/ai.xml",
+            source_type="rss",
+            category="AI",
+        )
+        finance_item = _article(source_finance, "OpenAI announces new model", "finance")
+        ai_item = _article(source_ai, "OpenAI announces new model", "ai")
+        finance_event = NewsEvent(canonical_title=finance_item.title, category="财经")
+        finance_event.event_news = [EventNews(news_item=finance_item, is_primary=True)]
+        session.add_all([source_finance, source_ai, finance_item, ai_item, finance_event])
+        await session.commit()
+
+        events = await NewsClusteringService(session).cluster_pending()
+
+        assert len(events) == 1
+        assert events[0].category == "AI"
+        assert await session.scalar(select(func.count()).select_from(NewsEvent)) == 2
+    await engine.dispose()

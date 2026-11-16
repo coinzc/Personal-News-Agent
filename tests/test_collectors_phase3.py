@@ -1,9 +1,10 @@
+import asyncio
 from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import pytest
-from app.collectors.base import CollectorHTTPError, InvalidFeedError
+from app.collectors.base import BaseCollector, CollectedNews, CollectorHTTPError, InvalidFeedError
 from app.collectors.rss import RSSCollector
 
 RSS = """<rss version="2.0"><channel><item><title>Example &amp; release</title>
@@ -82,3 +83,27 @@ async def test_dns_retry_and_source_isolation() -> None:
         result = await collector.collect_many([bad, good])
     assert isinstance(result[str(bad.id)], InvalidFeedError)
     assert isinstance(result[str(good.id)], CollectorHTTPError)
+
+
+@pytest.mark.asyncio
+async def test_collect_many_respects_configured_concurrency_limit() -> None:
+    class ConcurrentCollector(BaseCollector):
+        def __init__(self) -> None:
+            super().__init__(max_concurrency=2)
+            self.active = 0
+            self.maximum_active = 0
+
+        async def collect(self, source) -> list[CollectedNews]:
+            self.active += 1
+            self.maximum_active = max(self.maximum_active, self.active)
+            await asyncio.sleep(0.01)
+            self.active -= 1
+            return []
+
+    collector = ConcurrentCollector()
+    sources = [source(f"https://feed.test/{index}") for index in range(8)]
+
+    results = await collector.collect_many(sources)
+
+    assert len(results) == len(sources)
+    assert collector.maximum_active == 2

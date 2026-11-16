@@ -29,8 +29,10 @@ class RSSCollector(BaseCollector):
         timeout: float = 15.0,
         max_retries: int = 3,
         backoff_factor: float = 0.5,
+        max_concurrency: int = 5,
         client: httpx.AsyncClient | None = None,
     ) -> None:
+        super().__init__(max_concurrency=max_concurrency)
         self.timeout, self.max_retries, self.backoff_factor, self._client = timeout, max_retries, backoff_factor, client
 
     async def collect(self, source: Any) -> list[CollectedNews]:

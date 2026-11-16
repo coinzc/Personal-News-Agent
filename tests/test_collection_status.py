@@ -95,3 +95,36 @@ async def test_collection_marks_completed_when_sources_succeed(tmp_path) -> None
         assert task is not None
         assert task.status == "completed"
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_collection_clusters_backlog_in_bounded_batches(tmp_path) -> None:
+    engine = await make_session(tmp_path)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        source = (await add_sources(session, 1))[0]
+        collector = FakeCollector(
+            {
+                str(source.id): [
+                    CollectedNews(
+                        title="Apple announces a new AI model",
+                        url="https://example.test/apple",
+                        category="AI",
+                    ),
+                    CollectedNews(
+                        title="A new game launches in Japan",
+                        url="https://example.test/game",
+                        category="游戏",
+                    ),
+                ]
+            }
+        )
+        service = NewsCollectionService(session, collector=collector, clustering_batch_size=1)
+
+        first = await service.collect_enabled_sources()
+        second = await service.collect_enabled_sources()
+
+        assert first["events"] == 1
+        assert first["pending_items"] == 1
+        assert second["events"] == 1
+        assert second["pending_items"] == 0
+    await engine.dispose()

@@ -59,6 +59,8 @@ DEEPSEEK_API_KEY=your-real-deepseek-key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 ENABLE_SCHEDULER=true
+NEWS_COLLECTION_MAX_CONCURRENCY=5
+NEWS_CLUSTERING_BATCH_SIZE=500
 MESSAGE_CHANNEL=wecom_group_bot
 WECOM_GROUP_BOT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=replace-me
 WECOM_MESSAGE_TYPE=markdown

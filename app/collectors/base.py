@@ -47,6 +47,11 @@ class CollectedNews:
 class BaseCollector(ABC):
     """Asynchronous collector interface independent of persistence logic."""
 
+    def __init__(self, *, max_concurrency: int = 5) -> None:
+        if max_concurrency <= 0:
+            raise ValueError("max_concurrency must be greater than zero")
+        self.max_concurrency = max_concurrency
+
     @abstractmethod
     async def collect(self, source: NewsSource) -> list[CollectedNews]:
         """Collect normalized articles from one configured source."""
@@ -55,7 +60,16 @@ class BaseCollector(ABC):
         """Collect enabled sources concurrently while isolating failures."""
 
         enabled_sources = [source for source in sources if source.enabled]
-        results = await asyncio.gather(*(self.collect(source) for source in enabled_sources), return_exceptions=True)
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def collect_limited(source: NewsSource) -> list[CollectedNews]:
+            async with semaphore:
+                return await self.collect(source)
+
+        results = await asyncio.gather(
+            *(collect_limited(source) for source in enabled_sources),
+            return_exceptions=True,
+        )
         return {
             str(source.id): cast(list[CollectedNews] | Exception, result)
             for source, result in zip(enabled_sources, results, strict=True)

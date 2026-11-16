@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     llm_backoff_factor: float = Field(default=0.5, ge=0.0)
     enable_scheduler: bool = False
     news_collection_interval_minutes: int = Field(default=30, ge=5, le=1_440)
+    news_collection_max_concurrency: int = Field(default=5, ge=1, le=100)
+    news_clustering_batch_size: int = Field(default=500, ge=1, le=10_000)
     message_channel: Literal["wechat", "wecom_group_bot"] = "wechat"
     wechat_gateway_endpoint: str | None = None
     wechat_gateway_token: SecretStr | None = None

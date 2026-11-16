@@ -6,10 +6,12 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.collectors.rss import RSSCollector
+from app.models.event import EventNews
+from app.models.news import NewsItem
 from app.models.source import NewsSource
 from app.models.task import Task
 from app.services.news_clustering_service import NewsClusteringService
@@ -19,8 +21,19 @@ logger = logging.getLogger(__name__)
 
 
 class NewsCollectionService:
-    def __init__(self, session: AsyncSession, *, collector: RSSCollector | None = None) -> None:
-        self.session, self.collector = session, collector or RSSCollector()
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        collector: RSSCollector | None = None,
+        max_concurrency: int = 5,
+        clustering_batch_size: int = 500,
+    ) -> None:
+        if clustering_batch_size <= 0:
+            raise ValueError("clustering_batch_size must be greater than zero")
+        self.session = session
+        self.collector = collector or RSSCollector(max_concurrency=max_concurrency)
+        self.clustering_batch_size = clustering_batch_size
 
     async def collect_enabled_sources(self) -> dict[str, Any]:
         task_record = Task(task_type="collect_news", status="running", attempts=1, payload={})
@@ -79,7 +92,16 @@ class NewsCollectionService:
             inserted += added
             skipped += ignored
             source.last_collected_at = datetime.now(UTC)
-        clustered = await NewsClusteringService(self.session).cluster_pending(commit=False)
+        clustered = await NewsClusteringService(self.session).cluster_pending(
+            limit=self.clustering_batch_size,
+            commit=False,
+        )
+        pending_items = await self.session.scalar(
+            select(func.count())
+            .select_from(NewsItem)
+            .outerjoin(EventNews, EventNews.news_item_id == NewsItem.id)
+            .where(EventNews.news_item_id.is_(None))
+        )
         await self.session.commit()
         return {
             "sources": len(sources),
@@ -89,6 +111,7 @@ class NewsCollectionService:
             "inserted": inserted,
             "skipped": skipped,
             "events": len(clustered),
+            "pending_items": int(pending_items or 0),
         }
 
     @staticmethod

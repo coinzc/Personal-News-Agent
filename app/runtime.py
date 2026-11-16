@@ -128,7 +128,11 @@ class ApplicationContainer:
 
     async def collect_news(self) -> dict[str, Any]:
         async with self.session_factory() as session:
-            return await NewsCollectionService(session).collect_enabled_sources()
+            return await NewsCollectionService(
+                session,
+                max_concurrency=self.settings.news_collection_max_concurrency,
+                clustering_batch_size=self.settings.news_clustering_batch_size,
+            ).collect_enabled_sources()
 
     async def generate_and_send_daily_digest(self, digest_date: date | None = None) -> Any:
         digest = await self.generate_daily_digest(digest_date)

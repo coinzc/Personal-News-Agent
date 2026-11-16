@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -58,11 +58,15 @@ class NewsClusteringService:
                 self.session.add(item)
         await self.session.flush()
 
-        contexts = await self._load_event_contexts()
+        contexts_by_category = {
+            category: await self._load_event_contexts(category)
+            for category in {item.category for item in items}
+        }
         event_by_item_id: dict[UUID, _EventContext] = {}
-        for context in contexts:
-            for linked_item in context.items:
-                event_by_item_id[linked_item.id] = context
+        for contexts in contexts_by_category.values():
+            for context in contexts:
+                for linked_item in context.items:
+                    event_by_item_id[linked_item.id] = context
 
         touched: list[NewsEvent] = []
         touched_ids: set[UUID] = set()
@@ -74,6 +78,7 @@ class NewsClusteringService:
                     self._record_touched(existing_context.event, touched, touched_ids)
                     continue
 
+                contexts = contexts_by_category.setdefault(item.category, [])
                 selected_context, evidence = await self._best_event_match(item, contexts)
                 if selected_context is None:
                     event = NewsEvent(
@@ -135,8 +140,12 @@ class NewsClusteringService:
 
         return await self.cluster_items(items, commit=commit)
 
-    async def _load_event_contexts(self) -> list[_EventContext]:
-        stmt = select(NewsEvent).options(selectinload(NewsEvent.event_news).selectinload(EventNews.news_item))
+    async def _load_event_contexts(self, category: str) -> list[_EventContext]:
+        stmt = (
+            select(NewsEvent)
+            .where(func.lower(NewsEvent.category) == category.casefold())
+            .options(selectinload(NewsEvent.event_news).selectinload(EventNews.news_item))
+        )
         events = list((await self.session.scalars(stmt)).all())
         return [
             _EventContext(
