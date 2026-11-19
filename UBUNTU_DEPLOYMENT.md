@@ -90,6 +90,7 @@ cd /opt/personal-news-agent
 docker compose up -d --build
 docker compose ps
 docker compose exec backend python -m app.db.init_db
+docker compose exec backend python -m app.db.seed_sources
 curl -f http://127.0.0.1/ready
 ```
 
@@ -192,7 +193,11 @@ Do not run `docker compose down -v` unless you intend to delete database and Red
 ## Troubleshooting
 
 - Agent returns 503: configure `DEEPSEEK_API_KEY` and restart backend.
-- Digest contains no articles: collect news into PostgreSQL first.
+- Digest contains no articles: collect news into PostgreSQL first. The default
+  source catalog uses CNBC Business/Finance, Al Jazeera World and Science News
+  as reachable alternatives for business, finance, international and science
+  coverage. Re-run `python -m app.db.seed_sources` after upgrading to migrate
+  legacy BBC, Guardian and ScienceDaily source rows.
 - WeChat fails: check gateway endpoint, outbound token and recipient.
 - Webhook returns 401: check `X-WeChat-Webhook-Token`.
 - Backend fails: inspect `docker compose logs backend postgres redis`.

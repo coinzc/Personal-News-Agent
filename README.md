@@ -89,6 +89,8 @@ docker compose exec backend python -m app.db.init_db
 docker compose exec backend python -m app.db.seed_sources
 ```
 
+默认目录使用可从常见云服务器出口访问的公开 RSS：CNBC Business、CNBC Finance、Al Jazeera World 和 Science News，分别覆盖商业、财经、国际和科学领域。旧版本中的 BBC Business、BBC World、The Guardian Business 和 ScienceDaily 记录会在重新执行该命令时迁移到这些替代源；已有新闻不会被删除。
+
 访问：
 
 - API 文档：`http://SERVER_IP/docs`
