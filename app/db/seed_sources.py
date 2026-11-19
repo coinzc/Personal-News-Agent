@@ -48,6 +48,10 @@ async def seed_sources() -> int:
                 continue
             old_source.url = new_url
             old_source.enabled = True
+        # The production session factory disables autoflush. Make migrated URLs
+        # visible to the catalog lookups below before deciding to insert rows.
+        await session.flush()
+
         for name, url, category, language, country, priority in DEFAULT_RSS_SOURCES:
             source = await session.scalar(select(NewsSource).where(NewsSource.url == url))
             if source is not None:

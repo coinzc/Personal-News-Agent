@@ -32,7 +32,7 @@ async def test_seed_migrates_legacy_rows_and_is_idempotent(tmp_path, monkeypatch
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
 
-    factory = async_sessionmaker(engine, expire_on_commit=False)
+    factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
     monkeypatch.setattr(seed_module, "get_session_factory", lambda: factory)
     old_url, new_url = next(iter(LEGACY_SOURCE_REPLACEMENTS.items()))
     source_id = uuid4()
