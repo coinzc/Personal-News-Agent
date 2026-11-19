@@ -86,6 +86,8 @@ async def test_news_event_digest_and_source_routes(tmp_path) -> None:
         news_response = await client.get("/api/news", params={"q": "OpenAI"})
         assert news_response.status_code == 200
         assert news_response.json()[0]["title"] == "OpenAI releases a new model"
+        assert news_response.json()[0]["source_name"] == "Test RSS"
+        assert news_response.json()[0]["importance_score"] == 88
         events_response = await client.get("/api/events", params={"q": "OpenAI"})
         assert events_response.status_code == 200
         assert events_response.json()[0]["importance_score"] == 88

@@ -30,3 +30,7 @@ logs/
 
 # Local agent workspace data
 .workbuddy/
+
+# Frontend build dependencies and artifacts
+frontend/node_modules/
+frontend/dist/

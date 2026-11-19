@@ -13,6 +13,7 @@
 - News Agent：搜索新闻、按领域查询、查看详情、搜索事件、分析和总结。
 - 每日日报：AI、科技、编程、财经、商业、国际、科学七个展示领域，每个领域最多 3 条。
 - 企业微信推送：空领域隐藏、领域表情、北京时间、原文链接集中展示、按 UTF-8 字节安全分片。
+- React 管理面板：同域 `/admin/` 访问总览、新闻、事件、日报和新闻源管理，管理密钥只保存在当前浏览器会话。
 - 运行保障：PostgreSQL 持久化、Redis 日报锁、任务状态、失败重试、Docker Compose 部署。
 
 ## 系统架构
@@ -35,6 +36,8 @@ Collectors ──> Ingestion ──> Deduplication ──> Event clustering
 FastAPI <── Nginx <── HTTP clients
 APScheduler ──> RSS collection and 09:00 digest jobs
 ```
+
+管理面板通过独立的 React + Vite 前端构建，生产环境由 Nginx 提供静态文件并代理 `/api/`。启动 Compose 后访问 `http://SERVER_IP/admin/`；首次进入时输入 `ADMIN_API_KEY`，密钥只保存在当前标签页的 `sessionStorage`。
 
 `app/runtime.py` 是运行时组合入口，负责创建数据库会话、Redis、DeepSeek 客户端和消息渠道。Agent 只调用工具，不直接操作 ORM；日报服务和采集服务分别负责业务编排与数据写入。
 
@@ -90,6 +93,7 @@ docker compose exec backend python -m app.db.seed_sources
 
 - API 文档：`http://SERVER_IP/docs`
 - 健康检查：`http://SERVER_IP/health`
+- 管理面板：`http://SERVER_IP/admin/`
 
 ### Ubuntu 一键部署
 
@@ -170,6 +174,7 @@ app/
 ├── models/      # SQLAlchemy ORM 模型
 ├── scheduler/   # APScheduler 任务
 ├── services/    # 采集、入库、去重、聚类、查询、日报
+frontend/        # React + Vite 管理面板
 ├── runtime.py   # 运行时依赖组合
 └── main.py      # FastAPI 应用入口
 db/migrations/   # Alembic migration

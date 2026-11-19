@@ -25,11 +25,13 @@ class SQLAlchemyNewsToolService:
 
     @staticmethod
     def _item_payload(item: NewsItem) -> dict[str, Any]:
+        importance_score = max((event.importance_score or 0.0 for event in item.events), default=0.0)
         return {
             "id": str(item.id),
             "title": item.title,
             "url": item.url,
             "source_id": str(item.source_id),
+            "source_name": item.source.name if item.source is not None else None,
             "author": item.author,
             "published_at": item.published_at.isoformat() if item.published_at else None,
             "summary": item.summary,
@@ -38,6 +40,7 @@ class SQLAlchemyNewsToolService:
             "category": item.category,
             "tags": item.tags,
             "image_url": item.image_url,
+            "importance_score": importance_score,
         }
 
     @staticmethod
@@ -55,6 +58,7 @@ class SQLAlchemyNewsToolService:
         }
 
     async def _items(self, statement: Any) -> list[dict[str, Any]]:
+        statement = statement.options(selectinload(NewsItem.events), selectinload(NewsItem.source))
         items = list((await self.session.scalars(statement)).all())
         return [self._item_payload(item) for item in items]
 
@@ -84,14 +88,19 @@ class SQLAlchemyNewsToolService:
             statement = statement.where(NewsItem.url == url)
         else:
             return None
-        item = await self.session.scalar(statement)
+        item = await self.session.scalar(
+            statement.options(selectinload(NewsItem.events), selectinload(NewsItem.source))
+        )
         return self._item_payload(item) if item is not None else None
 
     async def search_events(self, query: str, category: str | None, limit: int) -> list[dict[str, Any]]:
         pattern = f"%{query}%"
         statement = (
             select(NewsEvent)
-            .options(selectinload(NewsEvent.news_items))
+            .options(
+                selectinload(NewsEvent.news_items).selectinload(NewsItem.events),
+                selectinload(NewsEvent.news_items).selectinload(NewsItem.source),
+            )
             .where(or_(NewsEvent.canonical_title.ilike(pattern), NewsEvent.summary.ilike(pattern)))
         )
         if category:
